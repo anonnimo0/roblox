@@ -1,5 +1,6 @@
 --// Foxxy's Leaks — Admin/Debug UI (para TU experiencia)
---// Login con key -> 3 menús: Movimiento (velocidad, noclip, fly), Visual (nombres + highlight + tracer), Créditos
+--// Login con key -> 3 menús: Movimiento (velocidad, noclip, salto, fly + slider velocidad),
+--//                      Visual (nombres + highlight), Créditos
 --// Fondo de estrellas animadas, tecla L para ocultar/mostrar
 --// Pie: "programador: by pedri.exe"
 
@@ -26,9 +27,9 @@ local JUMP_MAX_ABS_ADD = 28 -- tope de aumento absoluto
 -- Noclip anti-rebote
 local NOCLIP_CORRECTION_FACTOR = 0.85
 
--- Fly
-local FLY_SPEED_DEFAULT = 64  -- velocidad de vuelo con WASD
-local FLY_TILT_STIFFNESS = 8  -- suavidad para seguir la cámara
+-- Fly (slider propio)
+local FLY_SPEED_MIN, FLY_SPEED_MAX, FLY_SPEED_DEFAULT = 16, 200, 64
+local FLY_TILT_STIFFNESS = 8  -- suavidad para orientar hacia la cámara
 
 -- Discord y logo
 local DISCORD_LINK = "https://discord.gg/xQbpCEgz9E"
@@ -38,11 +39,11 @@ local LOGO_ASSET_ID = "rbxassetid://0000000000" -- <- REEMPLAZA por tu assetId c
 -------------------------
 --      SERVICIOS      --
 -------------------------
-local Players = game:GetService("Players")
-local UIS     = game:GetService("UserInputService")
-local TS      = game:GetService("TweenService")
-local RS      = game:GetService("RunService")
-local SG      = game:GetService("StarterGui")
+local Players   = game:GetService("Players")
+local UIS       = game:GetService("UserInputService")
+local TS        = game:GetService("TweenService")
+local RS        = game:GetService("RunService")
+local SG        = game:GetService("StarterGui")
 local Workspace = game:GetService("Workspace")
 
 local lp = Players.LocalPlayer
@@ -381,7 +382,7 @@ spawnStars(starLayer, 80)
 -------------------------
 --   MOVIMIENTO (UI)   --
 -------------------------
--- Slider de velocidad
+-- Slider de velocidad (caminar)
 local sliderBack = Instance.new("Frame")
 sliderBack.Size = UDim2.new(1, -20, 0, 10)
 sliderBack.Position = UDim2.new(0, 10, 0, 10)
@@ -543,6 +544,82 @@ do
     end)
 end
 
+-- Slider de VELOCIDAD DE VUELO (Fly)
+local flyBack = Instance.new("Frame")
+flyBack.Size = UDim2.new(1, -20, 0, 10)
+flyBack.Position = UDim2.new(0, 10, 0, 130)
+flyBack.BackgroundColor3 = Color3.fromRGB(42,42,60)
+flyBack.BorderSizePixel = 0
+flyBack.ZIndex = 3
+flyBack.Parent = pageMove
+Instance.new("UICorner", flyBack).CornerRadius = UDim.new(0, 6)
+
+local flyKnob = Instance.new("Frame")
+flyKnob.Size = UDim2.fromOffset(14, 18)
+flyKnob.BackgroundColor3 = Color3.fromRGB(200,140,90)
+flyKnob.BorderSizePixel = 0
+flyKnob.ZIndex = 4
+flyKnob.Parent = flyBack
+Instance.new("UICorner", flyKnob).CornerRadius = UDim.new(1, 0)
+
+local flyLabel = Instance.new("TextLabel")
+flyLabel.BackgroundTransparency = 1
+flyLabel.Position = UDim2.new(0, 10, 0, 152)
+flyLabel.Size = UDim2.new(1, -20, 0, 20)
+flyLabel.Font = Enum.Font.Gotham
+flyLabel.TextSize = 14
+flyLabel.TextColor3 = Color3.fromRGB(235,235,255)
+flyLabel.ZIndex = 4
+flyLabel.Parent = pageMove
+
+local function relFromVal(val, minv, maxv)
+    return (val - minv) / (maxv - minv)
+end
+
+local function valFromRel(rel, minv, maxv)
+    return math.floor(minv + rel*(maxv - minv) + 0.5)
+end
+
+local flySpeed = FLY_SPEED_DEFAULT
+local function setFlySpeed(v)
+    v = math.clamp(math.floor(v + 0.5), FLY_SPEED_MIN, FLY_SPEED_MAX)
+    flySpeed = v
+    flyLabel.Text = ("Velocidad de vuelo: %d"):format(v)
+end
+-- posicionar knob inicial
+do
+    local rel = relFromVal(FLY_SPEED_DEFAULT, FLY_SPEED_MIN, FLY_SPEED_MAX)
+    flyKnob.Position = UDim2.new(rel, -7, 0.5, -9)
+    setFlySpeed(FLY_SPEED_DEFAULT)
+end
+-- drag/click slider fly
+do
+    local dragging = false
+    local function update(inputPosX)
+        local rel = math.clamp((inputPosX - flyBack.AbsolutePosition.X)/flyBack.AbsoluteSize.X, 0, 1)
+        flyKnob.Position = UDim2.new(rel, -7, 0.5, -9)
+        setFlySpeed(valFromRel(rel, FLY_SPEED_MIN, FLY_SPEED_MAX))
+    end
+    flyKnob.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            inp.Changed:Connect(function()
+                if inp.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    UIS.InputChanged:Connect(function(inp)
+        if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
+            update(inp.Position.X)
+        end
+    end)
+    flyBack.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            update(inp.Position.X)
+        end
+    end)
+end
+
 -- Botones Movimiento: Noclip + Fly
 local function makeBtnMove(text, y)
     local b = Instance.new("TextButton")
@@ -631,18 +708,17 @@ local function disableNoclip()
     end
 end
 
-local btnNoclip = makeBtnMove("Atravesar paredes: OFF", 124)
+local btnNoclip = makeBtnMove("Atravesar paredes: OFF", 186)
 btnNoclip.MouseButton1Click:Connect(function()
     if noclipOn then disableNoclip() else enableNoclip() end
     setBtnState(btnNoclip, "Atravesar paredes: ", noclipOn)
 end)
 setBtnState(btnNoclip, "Atravesar paredes: ", noclipOn)
 
--- Fly (WASD, mantiene altura)
+-- Fly (WASD horizontal, Espacio sube, Ctrl baja)
 local flyOn = false
 local flyBV, flyBGyro
 local flyConn
-local flySpeed = FLY_SPEED_DEFAULT
 
 local function enableFly()
     if flyOn then return end
@@ -650,7 +726,7 @@ local function enableFly()
     local hum, hrp = getHum()
     if not (hum and hrp) then return end
 
-    hum.PlatformStand = true -- desactiva animaciones físicas del humanoide
+    hum.PlatformStand = true -- desactiva físicas del humanoide para volar suave
     flyBV = Instance.new("BodyVelocity")
     flyBV.MaxForce = Vector3.new(1e5, 1e5, 1e5)
     flyBV.Velocity = Vector3.zero
@@ -662,23 +738,31 @@ local function enableFly()
     flyBGyro.Parent = hrp
 
     local cam = Workspace.CurrentCamera
-    local heightY = 0 -- mantener altura
     flyConn = RS.RenderStepped:Connect(function(dt)
         if not flyOn then return end
-        local dir = Vector3.zero
         local look = cam.CFrame.LookVector
         local right = cam.CFrame.RightVector
 
-        if UIS:IsKeyDown(Enum.KeyCode.W) then dir += Vector3.new(look.X, 0, look.Z) end
-        if UIS:IsKeyDown(Enum.KeyCode.S) then dir -= Vector3.new(look.X, 0, look.Z) end
-        if UIS:IsKeyDown(Enum.KeyCode.D) then dir += Vector3.new(right.X, 0, right.Z) end
-        if UIS:IsKeyDown(Enum.KeyCode.A) then dir -= Vector3.new(right.X, 0, right.Z) end
+        local flatLook  = Vector3.new(look.X, 0, look.Z)
+        local flatRight = Vector3.new(right.X, 0, right.Z)
 
-        if dir.Magnitude > 0 then dir = dir.Unit * flySpeed else dir = Vector3.zero end
-        flyBV.Velocity = Vector3.new(dir.X, heightY, dir.Z)
+        local dir = Vector3.zero
+        if UIS:IsKeyDown(Enum.KeyCode.W) then dir += flatLook end
+        if UIS:IsKeyDown(Enum.KeyCode.S) then dir -= flatLook end
+        if UIS:IsKeyDown(Enum.KeyCode.D) then dir += flatRight end
+        if UIS:IsKeyDown(Enum.KeyCode.A) then dir -= flatRight end
+        if dir.Magnitude > 0 then dir = dir.Unit else dir = Vector3.zero end
 
-        -- Orientar suavemente hacia la cámara
-        local targetCF = CFrame.lookAt(hrp.Position, hrp.Position + Vector3.new(look.X, 0, look.Z))
+        -- Vertical: Espacio sube, Ctrl baja
+        local up = 0
+        if UIS:IsKeyDown(Enum.KeyCode.Space) then up = 1 end
+        if UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl) then up = -1 end
+
+        flyBV.Velocity = Vector3.new(dir.X * flySpeed, up * flySpeed, dir.Z * flySpeed)
+
+        -- Orientar suavemente hacia la dirección de la cámara (horizontal)
+        local hrpPos = hrp.Position
+        local targetCF = CFrame.lookAt(hrpPos, hrpPos + flatLook)
         hrp.CFrame = hrp.CFrame:Lerp(targetCF, math.clamp(FLY_TILT_STIFFNESS*dt, 0, 1))
         flyBGyro.CFrame = cam.CFrame
     end)
@@ -694,7 +778,7 @@ local function disableFly()
     if flyBGyro then flyBGyro:Destroy(); flyBGyro=nil end
 end
 
-local btnFly = makeBtnMove("Fly: OFF", 170)
+local btnFly = makeBtnMove("Fly: OFF", 232)
 btnFly.MouseButton1Click:Connect(function()
     if flyOn then disableFly() else enableFly() end
     setBtnState(btnFly, "Fly: ", flyOn)
@@ -724,85 +808,13 @@ lp.CharacterAdded:Connect(function(char)
 end)
 
 --------------------------------
---  VISUAL: NOMBRES + HIGHLIGHT + TRACER
+--  VISUAL: NOMBRES + HIGHLIGHT
 --------------------------------
 local showNames = false
 local showHighlight = false
-local showTracer = false
-
 local nameTags = {}   -- [player] = BillboardGui
 local highlights = {} -- [player] = Highlight
 
--- Tracers (líneas 2D)
-local tracerFolder = Instance.new("Folder")
-tracerFolder.Name = "TracerLines"
-tracerFolder.Parent = gui
-local tracerConn
-local tracerColor = Color3.fromRGB(255, 80, 80)
-local tracerThickness = 2
-
-local function drawLine(frame, from, to)
-    local dx, dy = to.X - from.X, to.Y - from.Y
-    local len = math.sqrt(dx*dx + dy*dy)
-    local ang = math.deg(math.atan2(dy, dx))
-    frame.Position = UDim2.fromOffset(from.X, from.Y)
-    frame.Size = UDim2.fromOffset(len, tracerThickness)
-    frame.Rotation = ang
-end
-
-local function enableTracer()
-    if tracerConn then return end
-    local cam = Workspace.CurrentCamera
-    tracerConn = RS.RenderStepped:Connect(function()
-        if not showTracer then return end
-        local viewport = cam.ViewportSize
-        local origin = Vector2.new(viewport.X*0.5, viewport.Y) -- centro abajo
-        local used = {}
-
-        -- crear/actualizar líneas
-        for _,plr in ipairs(Players:GetPlayers()) do
-            if plr ~= lp then
-                local char = plr.Character
-                local head = char and char:FindFirstChild("Head")
-                if head then
-                    local pos, onScreen = cam:WorldToViewportPoint(head.Position)
-                    local key = "Tracer_"..plr.UserId
-                    local line = tracerFolder:FindFirstChild(key)
-                    if onScreen and pos.Z > 0 then
-                        if not line then
-                            line = Instance.new("Frame")
-                            line.Name = key
-                            line.BackgroundColor3 = tracerColor
-                            line.BorderSizePixel = 0
-                            line.AnchorPoint = Vector2.new(0, 0.5)
-                            line.Parent = tracerFolder
-                        end
-                        line.Visible = true
-                        drawLine(line, origin, Vector2.new(pos.X, pos.Y))
-                        table.insert(used, line)
-                    else
-                        if line then line.Visible = false end
-                    end
-                end
-            end
-        end
-        -- ocultar líneas no usadas (si algún jugador salió)
-        for _,child in ipairs(tracerFolder:GetChildren()) do
-            if table.find(used, child) == nil then
-                child.Visible = false
-            end
-        end
-    end)
-end
-
-local function disableTracer()
-    if tracerConn then tracerConn:Disconnect(); tracerConn=nil end
-    for _,child in ipairs(tracerFolder:GetChildren()) do
-        child.Visible = false
-    end
-end
-
--- Nombres
 local function attachNameTag(plr)
     if plr == lp then return end
     local function onChar(char)
@@ -831,7 +843,6 @@ local function attachNameTag(plr)
     if plr.Character then onChar(plr.Character) end
 end
 
--- Highlight
 local function attachHighlight(plr)
     if plr == lp then return end
     local function onChar(char)
@@ -864,8 +875,6 @@ end)
 Players.PlayerRemoving:Connect(function(p)
     if nameTags[p] then nameTags[p]:Destroy(); nameTags[p]=nil end
     if highlights[p] then highlights[p]:Destroy(); highlights[p]=nil end
-    local tl = tracerFolder:FindFirstChild("Tracer_"..p.UserId)
-    if tl then tl:Destroy() end
 end)
 
 -- Botones Visual
@@ -884,9 +893,8 @@ local function makeBtnVisual(parent, text, y)
     return b
 end
 
-local btnNames  = makeBtnVisual(pageVisual, "Nombres: OFF",           10)
-local btnESP    = makeBtnVisual(pageVisual, "Resaltar (rojo): OFF",   56)
-local btnTracer = makeBtnVisual(pageVisual, "Tracer: OFF",            102)
+local btnNames  = makeBtnVisual(pageVisual, "Nombres: OFF",         10)
+local btnESP    = makeBtnVisual(pageVisual, "Resaltar (rojo): OFF", 56)
 
 local function setBtnState2(b, label, on)
     b.Text = label .. (on and "ON" or "OFF")
@@ -905,15 +913,8 @@ btnESP.MouseButton1Click:Connect(function()
     setBtnState2(btnESP, "Resaltar (rojo): ", showHighlight)
 end)
 
-btnTracer.MouseButton1Click:Connect(function()
-    showTracer = not showTracer
-    if showTracer then enableTracer() else disableTracer() end
-    setBtnState2(btnTracer, "Tracer: ", showTracer)
-end)
-
 setBtnState2(btnNames,  "Nombres: ", showNames)
 setBtnState2(btnESP,    "Resaltar (rojo): ", showHighlight)
-setBtnState2(btnTracer, "Tracer: ", showTracer)
 
 -------------------------
 --      CRÉDITOS       --
@@ -987,7 +988,6 @@ end)
 -------------------------
 loginBtn.MouseButton1Click:Connect(function()
     if keyBox.Text == ACCESS_KEY then
-        -- Anuncio clicable de 9 segundos (copia el discord si haces click)
         clickableBanner("bienvenido si nesesitas ayuda ven al discord "..DISCORD_LINK, DISCORD_LINK, 9)
         TS:Create(loginFrame, TweenInfo.new(0.2), {Size = UDim2.fromOffset(360, 0)}):Play()
         task.delay(0.2, function()
