@@ -216,7 +216,7 @@ titleMain.Font = Enum.Font.GothamBold
 titleMain.TextSize = 14
 titleMain.TextXAlignment = Enum.TextXAlignment.Left
 titleMain.TextColor3 = Color3.fromRGB(220,220,255)
-titleMain.Text = "𝙁𝙤𝙭𝙭𝙮's 𝙇𝙚𝙖𝙠𝙨  —  [L para ocultar/mostrar]"
+titleMain.Text = " Foxxy's Leaks   —  [L para ocultar/mostrar]"
 titleMain.ZIndex = 4
 titleMain.Parent = topBar
 
