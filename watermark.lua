@@ -61,7 +61,7 @@ local function isAllowedUser()
 end
 
 if not isAllowedPlace() or not isAllowedUser() then
-    warn("[FoxyLeaks] No autorizado en este lugar/usuario. Configura ALLOWED_* en el script.")
+    warn("[Foxxy's Leaks] No autorizado en este lugar/usuario. Configura ALLOWED_* en el script.")
     return
 end
 
@@ -69,7 +69,7 @@ end
 --       GUI BASE      --
 -------------------------
 local gui = Instance.new("ScreenGui")
-gui.Name = "FoxyLeaksUI"
+gui.Name = "FoxxysLeaksUI"
 gui.ResetOnSpawn = false
 pcall(function() gui.Parent = game.CoreGui end)
 if not gui.Parent then gui.Parent = lp:WaitForChild("PlayerGui") end
@@ -90,7 +90,7 @@ title.BackgroundTransparency = 1
 title.Font = Enum.Font.GothamBold
 title.TextSize = 16
 title.TextColor3 = Color3.fromRGB(235,235,255)
-title.Text = "𝙁𝙤𝙭𝙭𝙮's 𝙇𝙚𝙖𝙠𝙨 — Login"
+title.Text = "Foxxy's Leaks — Login"
 title.Size = UDim2.new(1, -20, 0, 32)
 title.Position = UDim2.new(0, 10, 0, 10)
 title.Parent = loginFrame
@@ -132,7 +132,7 @@ info.Parent = loginFrame
 local function toast(txt)
     pcall(function()
         StarterGui:SetCore("SendNotification", {
-            Title = "𝙁𝙤𝙭𝙭𝙮's 𝙇𝙚𝙖𝙠𝙨";
+            Title = "Foxxy's Leaks";
             Text = txt;
             Duration = 5;
         })
@@ -229,7 +229,7 @@ footer.Font = Enum.Font.Gotham
 footer.TextSize = 12
 footer.TextXAlignment = Enum.TextXAlignment.Center
 footer.TextColor3 = Color3.fromRGB(150,150,170)
-footer.Text = "programador: by pedri.exe"
+footer.Text = "programador: by pedri.exe ceo Nakamy"
 footer.ZIndex = 4
 footer.Parent = content
 
@@ -777,8 +777,8 @@ end)
 loginBtn.MouseButton1Click:Connect(function()
     if keyBox.Text == ACCESS_KEY then
         -- Anuncios al activar key
-        toast("gracias por confiar en 𝙁𝙤𝙭𝙭𝙮's 𝙇𝙚𝙖𝙠𝙨. Si tienes alguna duda, abre ticket en el Discord.")
-        bannerAnnounce("gracias por confiar en 𝙁𝙤𝙭𝙭𝙮's 𝙇𝙚𝙖𝙠𝙨 — si tienes alguna duda, abre ticket en el Discord")
+        toast("gracias por confiar en Foxxy's Leaks. Si tienes alguna duda, abre ticket en el Discord.")
+        bannerAnnounce("gracias por confiar en Foxxy's Leaks — si tienes alguna duda, abre ticket en el Discord")
 
         TS:Create(loginFrame, TweenInfo.new(0.2), {Size = UDim2.fromOffset(360, 0)}):Play()
         task.delay(0.2, function()
