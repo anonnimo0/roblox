@@ -1,8 +1,7 @@
 --// Foxxy's Leaks — Admin/Debug UI (para TU experiencia)
---// Login con key -> 2 menús: Movimiento (velocidad, noclip, salto regulable) y Visual (nombres + highlight)
+--// Login con key -> 3 menús: Movimiento (velocidad, noclip, fly), Visual (nombres + highlight + tracer), Créditos
 --// Fondo de estrellas animadas, tecla L para ocultar/mostrar
 --// Pie: "programador: by pedri.exe"
---// Nota logo: usa LOGO_ASSET_ID cuando subas el decal a Roblox
 
 -------------------------
 --    CONFIGURACIÓN    --
@@ -27,6 +26,10 @@ local JUMP_MAX_ABS_ADD = 28 -- tope de aumento absoluto
 -- Noclip anti-rebote
 local NOCLIP_CORRECTION_FACTOR = 0.85
 
+-- Fly
+local FLY_SPEED_DEFAULT = 64  -- velocidad de vuelo con WASD
+local FLY_TILT_STIFFNESS = 8  -- suavidad para seguir la cámara
+
 -- Discord y logo
 local DISCORD_LINK = "https://discord.gg/xQbpCEgz9E"
 local LOGO_URL = "https://cdn.discordapp.com/attachments/1392752518148395119/1413517337851592805/c851ab41-8a9e-4458-8235-cf4479d3a0ce.png?ex=68be325b&is=68bce0db&hm=2b8ce5b8398729a2f08ecf597497755d416755ae837ba8e4ee2da72e915f9edc&"
@@ -39,7 +42,8 @@ local Players = game:GetService("Players")
 local UIS     = game:GetService("UserInputService")
 local TS      = game:GetService("TweenService")
 local RS      = game:GetService("RunService")
-local StarterGui = game:GetService("StarterGui")
+local SG      = game:GetService("StarterGui")
+local Workspace = game:GetService("Workspace")
 
 local lp = Players.LocalPlayer
 
@@ -131,10 +135,9 @@ info.Size = UDim2.new(1, -20, 0, 16)
 info.Position = UDim2.new(0, 10, 1, -22)
 info.Parent = loginFrame
 
--- Notificador simple (SetCore)
 local function toast(txt, dur)
     pcall(function()
-        StarterGui:SetCore("SendNotification", {
+        SG:SetCore("SendNotification", {
             Title = "Foxxy's Leaks";
             Text = txt;
             Duration = dur or 5;
@@ -183,8 +186,8 @@ end
 --  VENTANA PRINCIPAL  --
 -------------------------
 local main = Instance.new("Frame")
-main.Size = UDim2.fromOffset(480, 0) -- aparecerá con animación
-main.Position = UDim2.new(0.5, -240, 0.2, 0)
+main.Size = UDim2.fromOffset(520, 0) -- aparecerá con animación
+main.Position = UDim2.new(0.5, -260, 0.2, 0)
 main.BackgroundColor3 = Color3.fromRGB(8,8,12)
 main.BorderSizePixel = 0
 main.Visible = false
@@ -208,7 +211,7 @@ content.Parent = main
 
 -- TopBar con logo + título
 local topBar = Instance.new("Frame")
-topBar.Size = UDim2.new(1, 0, 0, 44)
+topBar.Size = UDim2.new(1, 0, 0, 48)
 topBar.BackgroundColor3 = Color3.fromRGB(16,16,24)
 topBar.BorderSizePixel = 0
 topBar.ZIndex = 3
@@ -217,18 +220,17 @@ Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 14)
 
 local logo = Instance.new("ImageLabel")
 logo.BackgroundTransparency = 1
-logo.Size = UDim2.fromOffset(32, 32)
-logo.Position = UDim2.new(0, 8, 0.5, -16)
+logo.Size = UDim2.fromOffset(36, 36)
+logo.Position = UDim2.new(0, 8, 0.5, -18)
 logo.ZIndex = 4
 logo.Parent = topBar
--- Intenta URL directa (algunos ejecutores la soportan). Si no, usa assetId:
-local ok = pcall(function() logo.Image = LOGO_URL end)
-if not ok then logo.Image = LOGO_ASSET_ID end
+local okLogo = pcall(function() logo.Image = LOGO_URL end)
+if not okLogo then logo.Image = LOGO_ASSET_ID end
 
 local titleMain = Instance.new("TextLabel")
 titleMain.BackgroundTransparency = 1
-titleMain.Size = UDim2.new(1, -52, 1, 0)
-titleMain.Position = UDim2.new(0, 48, 0, 0)
+titleMain.Size = UDim2.new(1, -60, 1, 0)
+titleMain.Position = UDim2.new(0, 52, 0, 0)
 titleMain.Font = Enum.Font.GothamBold
 titleMain.TextSize = 15
 titleMain.TextXAlignment = Enum.TextXAlignment.Left
@@ -280,7 +282,7 @@ end
 -- Tabs
 local tabs = Instance.new("Frame")
 tabs.Size = UDim2.new(1, -20, 0, 36)
-tabs.Position = UDim2.new(0, 10, 0, 52)
+tabs.Position = UDim2.new(0, 10, 0, 56)
 tabs.BackgroundTransparency = 1
 tabs.ZIndex = 3
 tabs.Parent = content
@@ -293,7 +295,7 @@ gridTabs.Parent = tabs
 local function makeTabBtn(text)
     local b = Instance.new("TextButton")
     b.AutoButtonColor = true
-    b.Size = UDim2.fromOffset(220, 32)
+    b.Size = UDim2.fromOffset(160, 32)
     b.BackgroundColor3 = Color3.fromRGB(28,28,40)
     b.TextColor3 = Color3.fromRGB(255,255,255)
     b.Font = Enum.Font.GothamBold
@@ -305,12 +307,13 @@ local function makeTabBtn(text)
     return b
 end
 
-local tabMove = makeTabBtn("Movimiento")
+local tabMove   = makeTabBtn("Movimiento")
 local tabVisual = makeTabBtn("Visual (debug)")
+local tabCred   = makeTabBtn("Créditos")
 
 local pages = Instance.new("Frame")
-pages.Size = UDim2.new(1, -20, 1, -52-36-18)
-pages.Position = UDim2.new(0, 10, 0, 52+36+8)
+pages.Size = UDim2.new(1, -20, 1, -56-36-18)
+pages.Position = UDim2.new(0, 10, 0, 56+36+8)
 pages.BackgroundTransparency = 1
 pages.ZIndex = 3
 pages.Parent = content
@@ -328,12 +331,21 @@ pageVisual.Visible = false
 pageVisual.ZIndex = 3
 pageVisual.Parent = pages
 
+local pageCred = Instance.new("Frame")
+pageCred.BackgroundTransparency = 1
+pageCred.Size = UDim2.new(1, 0, 1, 0)
+pageCred.Visible = false
+pageCred.ZIndex = 3
+pageCred.Parent = pages
+
 local function switchTo(which)
-    pageMove.Visible = (which == "move")
+    pageMove.Visible   = (which == "move")
     pageVisual.Visible = (which == "visual")
+    pageCred.Visible   = (which == "cred")
 end
 tabMove.MouseButton1Click:Connect(function() switchTo("move") end)
 tabVisual.MouseButton1Click:Connect(function() switchTo("visual") end)
+tabCred.MouseButton1Click:Connect(function() switchTo("cred") end)
 
 -------------------------
 --  ESTRELLAS (fondo)  --
@@ -341,7 +353,7 @@ tabVisual.MouseButton1Click:Connect(function() switchTo("visual") end)
 local function spawnStars(container, count)
     if container.AbsoluteSize.X < 1 then task.wait() end
     local w, h = container.AbsoluteSize.X, container.AbsoluteSize.Y
-    for i=1, count do
+    for _=1, count do
         local s = Instance.new("Frame")
         s.Size = UDim2.fromOffset(math.random(2,4), math.random(2,4))
         s.Position = UDim2.fromOffset(math.random(0, w), math.random(-h, h))
@@ -364,7 +376,7 @@ local function spawnStars(container, count)
         end)
     end
 end
-spawnStars(starLayer, 70)
+spawnStars(starLayer, 80)
 
 -------------------------
 --   MOVIMIENTO (UI)   --
@@ -531,7 +543,7 @@ do
     end)
 end
 
--- Botón Noclip
+-- Botones Movimiento: Noclip + Fly
 local function makeBtnMove(text, y)
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(1, -20, 0, 36)
@@ -547,6 +559,12 @@ local function makeBtnMove(text, y)
     return b
 end
 
+local function setBtnState(b, label, on)
+    b.Text = label .. (on and "ON" or "OFF")
+    b.BackgroundColor3 = on and Color3.fromRGB(45,130,90) or Color3.fromRGB(120,50,50)
+end
+
+-- Noclip
 local noclipOn = false
 local hbConn, steppedConn
 local originalCollide = {}
@@ -614,15 +632,74 @@ local function disableNoclip()
 end
 
 local btnNoclip = makeBtnMove("Atravesar paredes: OFF", 124)
-local function setBtnState(b, label, on)
-    b.Text = label .. (on and "ON" or "OFF")
-    b.BackgroundColor3 = on and Color3.fromRGB(45,130,90) or Color3.fromRGB(120,50,50)
-end
 btnNoclip.MouseButton1Click:Connect(function()
     if noclipOn then disableNoclip() else enableNoclip() end
     setBtnState(btnNoclip, "Atravesar paredes: ", noclipOn)
 end)
 setBtnState(btnNoclip, "Atravesar paredes: ", noclipOn)
+
+-- Fly (WASD, mantiene altura)
+local flyOn = false
+local flyBV, flyBGyro
+local flyConn
+local flySpeed = FLY_SPEED_DEFAULT
+
+local function enableFly()
+    if flyOn then return end
+    flyOn = true
+    local hum, hrp = getHum()
+    if not (hum and hrp) then return end
+
+    hum.PlatformStand = true -- desactiva animaciones físicas del humanoide
+    flyBV = Instance.new("BodyVelocity")
+    flyBV.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+    flyBV.Velocity = Vector3.zero
+    flyBV.Parent = hrp
+
+    flyBGyro = Instance.new("BodyGyro")
+    flyBGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+    flyBGyro.P = 1e4
+    flyBGyro.Parent = hrp
+
+    local cam = Workspace.CurrentCamera
+    local heightY = 0 -- mantener altura
+    flyConn = RS.RenderStepped:Connect(function(dt)
+        if not flyOn then return end
+        local dir = Vector3.zero
+        local look = cam.CFrame.LookVector
+        local right = cam.CFrame.RightVector
+
+        if UIS:IsKeyDown(Enum.KeyCode.W) then dir += Vector3.new(look.X, 0, look.Z) end
+        if UIS:IsKeyDown(Enum.KeyCode.S) then dir -= Vector3.new(look.X, 0, look.Z) end
+        if UIS:IsKeyDown(Enum.KeyCode.D) then dir += Vector3.new(right.X, 0, right.Z) end
+        if UIS:IsKeyDown(Enum.KeyCode.A) then dir -= Vector3.new(right.X, 0, right.Z) end
+
+        if dir.Magnitude > 0 then dir = dir.Unit * flySpeed else dir = Vector3.zero end
+        flyBV.Velocity = Vector3.new(dir.X, heightY, dir.Z)
+
+        -- Orientar suavemente hacia la cámara
+        local targetCF = CFrame.lookAt(hrp.Position, hrp.Position + Vector3.new(look.X, 0, look.Z))
+        hrp.CFrame = hrp.CFrame:Lerp(targetCF, math.clamp(FLY_TILT_STIFFNESS*dt, 0, 1))
+        flyBGyro.CFrame = cam.CFrame
+    end)
+end
+
+local function disableFly()
+    if not flyOn then return end
+    flyOn = false
+    local hum, hrp = getHum()
+    if hum then hum.PlatformStand = false end
+    if flyConn then flyConn:Disconnect(); flyConn=nil end
+    if flyBV then flyBV:Destroy(); flyBV=nil end
+    if flyBGyro then flyBGyro:Destroy(); flyBGyro=nil end
+end
+
+local btnFly = makeBtnMove("Fly: OFF", 170)
+btnFly.MouseButton1Click:Connect(function()
+    if flyOn then disableFly() else enableFly() end
+    setBtnState(btnFly, "Fly: ", flyOn)
+end)
+setBtnState(btnFly, "Fly: ", flyOn)
 
 -- Mantener al respawn
 lp.CharacterAdded:Connect(function(char)
@@ -634,6 +711,11 @@ lp.CharacterAdded:Connect(function(char)
         baseRecorded = false
         recordBaseJump(hum)
         applyJump(hum)
+        if flyOn then
+            task.wait(0.2)
+            enableFly()
+            setBtnState(btnFly, "Fly: ", true)
+        end
     end
     if noclipOn then
         task.wait(0.1)
@@ -642,13 +724,85 @@ lp.CharacterAdded:Connect(function(char)
 end)
 
 --------------------------------
---  VISUAL: NOMBRES + HIGHLIGHT
+--  VISUAL: NOMBRES + HIGHLIGHT + TRACER
 --------------------------------
 local showNames = false
 local showHighlight = false
+local showTracer = false
+
 local nameTags = {}   -- [player] = BillboardGui
 local highlights = {} -- [player] = Highlight
 
+-- Tracers (líneas 2D)
+local tracerFolder = Instance.new("Folder")
+tracerFolder.Name = "TracerLines"
+tracerFolder.Parent = gui
+local tracerConn
+local tracerColor = Color3.fromRGB(255, 80, 80)
+local tracerThickness = 2
+
+local function drawLine(frame, from, to)
+    local dx, dy = to.X - from.X, to.Y - from.Y
+    local len = math.sqrt(dx*dx + dy*dy)
+    local ang = math.deg(math.atan2(dy, dx))
+    frame.Position = UDim2.fromOffset(from.X, from.Y)
+    frame.Size = UDim2.fromOffset(len, tracerThickness)
+    frame.Rotation = ang
+end
+
+local function enableTracer()
+    if tracerConn then return end
+    local cam = Workspace.CurrentCamera
+    tracerConn = RS.RenderStepped:Connect(function()
+        if not showTracer then return end
+        local viewport = cam.ViewportSize
+        local origin = Vector2.new(viewport.X*0.5, viewport.Y) -- centro abajo
+        local used = {}
+
+        -- crear/actualizar líneas
+        for _,plr in ipairs(Players:GetPlayers()) do
+            if plr ~= lp then
+                local char = plr.Character
+                local head = char and char:FindFirstChild("Head")
+                if head then
+                    local pos, onScreen = cam:WorldToViewportPoint(head.Position)
+                    local key = "Tracer_"..plr.UserId
+                    local line = tracerFolder:FindFirstChild(key)
+                    if onScreen and pos.Z > 0 then
+                        if not line then
+                            line = Instance.new("Frame")
+                            line.Name = key
+                            line.BackgroundColor3 = tracerColor
+                            line.BorderSizePixel = 0
+                            line.AnchorPoint = Vector2.new(0, 0.5)
+                            line.Parent = tracerFolder
+                        end
+                        line.Visible = true
+                        drawLine(line, origin, Vector2.new(pos.X, pos.Y))
+                        table.insert(used, line)
+                    else
+                        if line then line.Visible = false end
+                    end
+                end
+            end
+        end
+        -- ocultar líneas no usadas (si algún jugador salió)
+        for _,child in ipairs(tracerFolder:GetChildren()) do
+            if table.find(used, child) == nil then
+                child.Visible = false
+            end
+        end
+    end)
+end
+
+local function disableTracer()
+    if tracerConn then tracerConn:Disconnect(); tracerConn=nil end
+    for _,child in ipairs(tracerFolder:GetChildren()) do
+        child.Visible = false
+    end
+end
+
+-- Nombres
 local function attachNameTag(plr)
     if plr == lp then return end
     local function onChar(char)
@@ -677,6 +831,7 @@ local function attachNameTag(plr)
     if plr.Character then onChar(plr.Character) end
 end
 
+-- Highlight
 local function attachHighlight(plr)
     if plr == lp then return end
     local function onChar(char)
@@ -709,8 +864,11 @@ end)
 Players.PlayerRemoving:Connect(function(p)
     if nameTags[p] then nameTags[p]:Destroy(); nameTags[p]=nil end
     if highlights[p] then highlights[p]:Destroy(); highlights[p]=nil end
+    local tl = tracerFolder:FindFirstChild("Tracer_"..p.UserId)
+    if tl then tl:Destroy() end
 end)
 
+-- Botones Visual
 local function makeBtnVisual(parent, text, y)
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(1, -20, 0, 36)
@@ -726,8 +884,9 @@ local function makeBtnVisual(parent, text, y)
     return b
 end
 
-local btnNames = makeBtnVisual(pageVisual, "Nombres: OFF", 10)
-local btnESP   = makeBtnVisual(pageVisual, "Resaltar (rojo): OFF", 56)
+local btnNames  = makeBtnVisual(pageVisual, "Nombres: OFF",           10)
+local btnESP    = makeBtnVisual(pageVisual, "Resaltar (rojo): OFF",   56)
+local btnTracer = makeBtnVisual(pageVisual, "Tracer: OFF",            102)
 
 local function setBtnState2(b, label, on)
     b.Text = label .. (on and "ON" or "OFF")
@@ -736,22 +895,65 @@ end
 
 btnNames.MouseButton1Click:Connect(function()
     showNames = not showNames
-    for _,bb in pairs(nameTags) do
-        if bb and bb.Parent then bb.Enabled = showNames end
-    end
+    for _,bb in pairs(nameTags) do if bb and bb.Parent then bb.Enabled = showNames end end
     setBtnState2(btnNames, "Nombres: ", showNames)
 end)
 
 btnESP.MouseButton1Click:Connect(function()
     showHighlight = not showHighlight
-    for _,h in pairs(highlights) do
-        if h and h.Parent then h.Enabled = showHighlight end
-    end
+    for _,h in pairs(highlights) do if h and h.Parent then h.Enabled = showHighlight end end
     setBtnState2(btnESP, "Resaltar (rojo): ", showHighlight)
 end)
 
-setBtnState2(btnNames, "Nombres: ", showNames)
-setBtnState2(btnESP,   "Resaltar (rojo): ", showHighlight)
+btnTracer.MouseButton1Click:Connect(function()
+    showTracer = not showTracer
+    if showTracer then enableTracer() else disableTracer() end
+    setBtnState2(btnTracer, "Tracer: ", showTracer)
+end)
+
+setBtnState2(btnNames,  "Nombres: ", showNames)
+setBtnState2(btnESP,    "Resaltar (rojo): ", showHighlight)
+setBtnState2(btnTracer, "Tracer: ", showTracer)
+
+-------------------------
+--      CRÉDITOS       --
+-------------------------
+local cred1 = Instance.new("TextLabel")
+cred1.BackgroundTransparency = 1
+cred1.Size = UDim2.new(1, -20, 0, 24)
+cred1.Position = UDim2.new(0, 10, 0, 10)
+cred1.Font = Enum.Font.GothamBold
+cred1.TextSize = 16
+cred1.TextColor3 = Color3.fromRGB(235,235,255)
+cred1.TextXAlignment = Enum.TextXAlignment.Left
+cred1.Text = "creador: pedri.exe / Nakamy"
+cred1.Parent = pageCred
+
+local cred2 = Instance.new("TextLabel")
+cred2.BackgroundTransparency = 1
+cred2.Size = UDim2.new(1, -20, 0, 22)
+cred2.Position = UDim2.new(0, 10, 0, 40)
+cred2.Font = Enum.Font.Gotham
+cred2.TextSize = 14
+cred2.TextColor3 = Color3.fromRGB(220,220,240)
+cred2.TextXAlignment = Enum.TextXAlignment.Left
+cred2.Text = "versión: V6"
+cred2.Parent = pageCred
+
+local credBtn = Instance.new("TextButton")
+credBtn.Size = UDim2.new(1, -20, 0, 36)
+credBtn.Position = UDim2.new(0, 10, 0, 72)
+credBtn.BackgroundColor3 = Color3.fromRGB(28,28,40)
+credBtn.TextColor3 = Color3.fromRGB(255,255,255)
+credBtn.Font = Enum.Font.GothamBold
+credBtn.TextSize = 14
+credBtn.Text = "Discord: "..DISCORD_LINK.."  (clic para copiar)"
+credBtn.Parent = pageCred
+Instance.new("UICorner", credBtn).CornerRadius = UDim.new(0, 8)
+credBtn.MouseButton1Click:Connect(function()
+    if setclipboard then setclipboard(DISCORD_LINK) end
+    credBtn.Text = "¡Copiado! "..DISCORD_LINK
+end)
 
 -------------------------
 --   TECLA L (toggle)  --
@@ -759,15 +961,15 @@ setBtnState2(btnESP,   "Resaltar (rojo): ", showHighlight)
 local function openMain()
     if main.Visible then return end
     main.Visible = true
-    main.Size = UDim2.fromOffset(480, 0)
+    main.Size = UDim2.fromOffset(520, 0)
     TS:Create(main, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-        {Size = UDim2.fromOffset(480, 360)}):Play()
+        {Size = UDim2.fromOffset(520, 400)}):Play()
 end
 
 local function closeMain()
     if not main.Visible then return end
     TS:Create(main, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-        {Size = UDim2.fromOffset(480, 0)}):Play()
+        {Size = UDim2.fromOffset(520, 0)}):Play()
     task.delay(0.25, function() main.Visible = false end)
 end
 
@@ -787,10 +989,6 @@ loginBtn.MouseButton1Click:Connect(function()
     if keyBox.Text == ACCESS_KEY then
         -- Anuncio clicable de 9 segundos (copia el discord si haces click)
         clickableBanner("bienvenido si nesesitas ayuda ven al discord "..DISCORD_LINK, DISCORD_LINK, 9)
-
-        -- (Opcional) También un toast de respaldo
-        toast("Bienvenido. Si necesitas ayuda, ven al Discord.", 5)
-
         TS:Create(loginFrame, TweenInfo.new(0.2), {Size = UDim2.fromOffset(360, 0)}):Play()
         task.delay(0.2, function()
             loginFrame.Visible = false
