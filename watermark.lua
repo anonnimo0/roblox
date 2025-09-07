@@ -1,4 +1,4 @@
---// Panel cuadrado con botones + toggle con L + noclip sin volar
+--// Panel cuadrado con botones + toggle con L + noclip sin volar (anti-rebote)
 --// creador: pedri.exe ジ
 
 -- Servicios
@@ -22,7 +22,7 @@ local OPEN_TIME = 0.28
 
 local panel = Instance.new("Frame")
 panel.Name = "Panel"
-panel.Size = UDim2.fromOffset(PANEL_W, 0) -- arranca cerrado (alto 0)
+panel.Size = UDim2.fromOffset(PANEL_W, 0)
 panel.Position = UDim2.new(0.5, -math.floor(PANEL_W/2), 0.22, 0)
 panel.BackgroundColor3 = Color3.fromRGB(26,26,26)
 panel.BorderSizePixel = 0
@@ -30,7 +30,6 @@ panel.Visible = true
 panel.Parent = gui
 Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 12)
 
--- Sombra
 local shadow = Instance.new("ImageLabel")
 shadow.Image = "rbxassetid://5028857084"
 shadow.ImageTransparency = 0.18
@@ -43,7 +42,6 @@ shadow.BackgroundTransparency = 1
 shadow.ZIndex = 0
 shadow.Parent = panel
 
--- Barra para arrastrar
 local top = Instance.new("Frame")
 top.Name = "TopBar"
 top.Size = UDim2.new(1, 0, 0, 36)
@@ -63,14 +61,12 @@ title.TextColor3 = Color3.fromRGB(235,235,235)
 title.Text = "Panel pedri.exe ジ  —  [L] mostrar/ocultar"
 title.Parent = top
 
--- Zona botones
 local body = Instance.new("Frame")
 body.BackgroundTransparency = 1
 body.Position = UDim2.new(0, 12, 0, 46)
 body.Size = UDim2.new(1, -24, 1, -46-40)
 body.Parent = panel
 
--- Grid de botones
 local grid = Instance.new("UIGridLayout")
 grid.CellPadding = UDim2.fromOffset(10, 10)
 grid.CellSize = UDim2.fromOffset(120, 40)
@@ -78,7 +74,6 @@ grid.HorizontalAlignment = Enum.HorizontalAlignment.Center
 grid.VerticalAlignment = Enum.VerticalAlignment.Top
 grid.Parent = body
 
--- Pie
 local footer = Instance.new("TextLabel")
 footer.BackgroundTransparency = 1
 footer.Size = UDim2.new(1, -16, 0, 24)
@@ -89,7 +84,7 @@ footer.TextColor3 = Color3.fromRGB(180,180,180)
 footer.Text = "creador: pedri.exe"
 footer.Parent = panel
 
--- ========== Helpers animación panel ==========
+-- ========== Animación panel ==========
 local isOpen, animBusy = true, false
 
 local function setDescAlpha(p, a)
@@ -98,10 +93,8 @@ local function setDescAlpha(p, a)
 			d.TextTransparency = a
 		elseif d:IsA("ImageLabel") or d:IsA("ImageButton") then
 			d.ImageTransparency = a
-		elseif d:IsA("Frame") then
-			if d ~= panel then
-				d.BackgroundTransparency = math.clamp(a, 0, 0.9)
-			end
+		elseif d:IsA("Frame") and d ~= panel then
+			d.BackgroundTransparency = math.clamp(a, 0, 0.9)
 		end
 	end
 end
@@ -136,7 +129,6 @@ local function closePanel()
 	isOpen, animBusy = false, false
 end
 
--- Toggle con L
 UIS.InputBegan:Connect(function(input, gp)
 	if gp then return end
 	if input.KeyCode == Enum.KeyCode.L then
@@ -144,7 +136,7 @@ UIS.InputBegan:Connect(function(input, gp)
 	end
 end)
 
--- Drag del panel desde la barra
+-- Drag
 do
 	local dragging, dragStart, startPos
 	local function update(input)
@@ -173,20 +165,17 @@ do
 	end)
 end
 
--- ======= Noclip SIN volar (solo atravesar paredes con WASD) =======
--- Idea: cuando está ON, desactivamos CanCollide en las partes del personaje,
--- pero NO tocamos el estado del Humanoid ni aplicamos BodyVelocity (así no vuela).
--- Restauramos el CanCollide original al apagar.
+-- ======= Noclip SIN volar (anti-rebote) =======
+-- Clave: además de CanCollide=false en TODAS las partes, añadimos un micro-traslado
+-- en la dirección de movimiento (WASD) por frame para evitar la corrección hacia atrás.
 local noclipOn = false
-local originalCollide = {}  -- [part] = bool
-local steppedConn
+local originalCollide = {}
+local steppedConn, hbConn
 
 local function cacheDefaults(char)
 	for _, p in ipairs(char:GetDescendants()) do
-		if p:IsA("BasePart") then
-			if originalCollide[p] == nil then
-				originalCollide[p] = p.CanCollide
-			end
+		if p:IsA("BasePart") and originalCollide[p] == nil then
+			originalCollide[p] = p.CanCollide
 		end
 	end
 end
@@ -194,8 +183,8 @@ end
 local function setCharCollision(char, canCollide)
 	for _, p in ipairs(char:GetDescendants()) do
 		if p:IsA("BasePart") then
-			-- mantenemos HumanoidRootPart sin colisión también para evitar atasques
 			p.CanCollide = canCollide
+			p.CanTouch = false -- evita triggers raros que empujan
 		end
 	end
 end
@@ -207,12 +196,13 @@ local function enableNoclip()
 		cacheDefaults(char)
 		setCharCollision(char, false)
 	end
+
+	-- 1) Refuerza no-colisión constantemente
 	if steppedConn then steppedConn:Disconnect() end
 	steppedConn = RS.Stepped:Connect(function()
 		if not noclipOn then return end
 		local c = lp.Character
 		if c then
-			-- reforzar por si Roblox cambia estados en runtime
 			for _, p in ipairs(c:GetDescendants()) do
 				if p:IsA("BasePart") then
 					p.CanCollide = false
@@ -220,16 +210,42 @@ local function enableNoclip()
 			end
 		end
 	end)
+
+	-- 2) Anti-rebote: empuje correctivo mínimo en dirección WASD
+	--    Mantiene el control normal (no vuela).
+	if hbConn then hbConn:Disconnect() end
+	hbConn = RS.Heartbeat:Connect(function(dt)
+		if not noclipOn then return end
+		local c = lp.Character
+		if not c then return end
+		local hum = c:FindFirstChildOfClass("Humanoid")
+		local hrp = c:FindFirstChild("HumanoidRootPart")
+		if not (hum and hrp) then return end
+
+		-- Dirección de entrada del jugador (WASD)
+		local dir = hum.MoveDirection
+		if dir.Magnitude > 0 then
+			-- Empuje muy pequeño, proporcional a WalkSpeed (no cambia la sensación)
+			local correction = dir.Unit * (hum.WalkSpeed * dt * 0.85)
+			-- Conservar Y para no "volar"
+			hrp.CFrame = hrp.CFrame + Vector3.new(correction.X, 0, correction.Z)
+		end
+
+		-- Evita que la física te "agarre"
+		hrp.AssemblyAngularVelocity = Vector3.new()
+	end)
 end
 
 local function disableNoclip()
 	noclipOn = false
 	if steppedConn then steppedConn:Disconnect() steppedConn = nil end
+	if hbConn then hbConn:Disconnect() hbConn = nil end
 	local char = lp.Character
 	if char then
 		for _, p in ipairs(char:GetDescendants()) do
 			if p:IsA("BasePart") and originalCollide[p] ~= nil then
 				p.CanCollide = originalCollide[p]
+				p.CanTouch = true
 			end
 		end
 	end
@@ -260,7 +276,6 @@ local function makeBtn(text)
 	return b
 end
 
--- Botón "no lisicion" (tu nombre)
 local btnNoclip = makeBtn("no lisicion: OFF")
 btnNoclip.Parent = body
 
@@ -270,21 +285,14 @@ local function setNoclipUI(on)
 end
 
 btnNoclip.MouseButton1Click:Connect(function()
-	if noclipOn then
-		disableNoclip()
-	else
-		enableNoclip()
-	end
+	if noclipOn then disableNoclip() else enableNoclip() end
 	setNoclipUI(noclipOn)
 end)
 
--- Botón para copiar tu link (opcional)
 local btnLink = makeBtn("copiar link")
 btnLink.Parent = body
 btnLink.MouseButton1Click:Connect(function()
-	if setclipboard then
-		setclipboard("https://miwa.lol/pedri")
-	end
+	if setclipboard then setclipboard("https://miwa.lol/pedri") end
 	pcall(function()
 		game:GetService("StarterGui"):SetCore("SendNotification", {
 			Title = "pedri.exe";
@@ -294,17 +302,16 @@ btnLink.MouseButton1Click:Connect(function()
 	end)
 end)
 
--- Botón cerrar/abrir (toggle panel)
 local btnToggle = makeBtn("ocultar [L]")
 btnToggle.Parent = body
 btnToggle.MouseButton1Click:Connect(function()
 	if isOpen then closePanel() else openPanel() end
 end)
 
--- Arranque bonito
+-- Arranque visual
 task.delay(0.05, function()
 	TS:Create(panel, TweenInfo.new(OPEN_TIME), {Size = UDim2.fromOffset(PANEL_W, PANEL_H)}):Play()
 end)
 
--- Estado inicial del noclip (OFF por defecto)
+-- Estado inicial del noclip
 setNoclipUI(false)
