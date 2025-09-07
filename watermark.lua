@@ -1,20 +1,18 @@
---// 𝙁𝙤𝙭𝙭𝙮's 𝙇𝙚𝙖𝙠𝙨 — Admin/Debug UI (para TU experiencia)
+--// Foxxy's Leaks — Admin/Debug UI (para TU experiencia)
 --// Login con key -> 2 menús: Movimiento (velocidad, noclip, salto regulable) y Visual (nombres + highlight)
 --// Fondo de estrellas animadas, tecla L para ocultar/mostrar
 --// Pie: "programador: by pedri.exe"
---// Opcional: limita por PlaceId/UserId para uso solo en tu juego
+--// Nota logo: usa LOGO_ASSET_ID cuando subas el decal a Roblox
 
 -------------------------
 --    CONFIGURACIÓN    --
 -------------------------
 local ACCESS_KEY = "HJGL-FKSS"
 
--- Limita a tus lugares (opcional). Si lo dejas vacío, funciona en cualquier place.
+-- Restringe a tus lugares/usuarios (opcional). Déjalo vacío para no restringir.
 local ALLOWED_PLACE_IDS = {
     -- 1234567890,
 }
-
--- Limita a ciertos UserId (opcional). Si lo dejas vacío, funciona para cualquiera.
 local ALLOWED_USER_IDS = {
     -- 987654321,
 }
@@ -22,13 +20,17 @@ local ALLOWED_USER_IDS = {
 -- Velocidad (WalkSpeed)
 local SPEED_MIN, SPEED_MAX, SPEED_DEFAULT = 8, 100, 16
 
--- Salto (slider como multiplicador del salto base)
+-- Salto (multiplicador via slider)
 local JUMP_MULT_MIN, JUMP_MULT_MAX, JUMP_MULT_DEFAULT = 0.9, 1.6, 1.25
--- Límite de aumento máximo absoluto para evitar saltos exagerados
-local JUMP_MAX_ABS_ADD = 28
+local JUMP_MAX_ABS_ADD = 28 -- tope de aumento absoluto
 
--- Noclip anti-rebote: fuerza correctiva (0.85 recomendado; sube a 1.2 si hay muros muy gruesos)
+-- Noclip anti-rebote
 local NOCLIP_CORRECTION_FACTOR = 0.85
+
+-- Discord y logo
+local DISCORD_LINK = "https://discord.gg/xQbpCEgz9E"
+local LOGO_URL = "https://cdn.discordapp.com/attachments/1392752518148395119/1413517337851592805/c851ab41-8a9e-4458-8235-cf4479d3a0ce.png?ex=68be325b&is=68bce0db&hm=2b8ce5b8398729a2f08ecf597497755d416755ae837ba8e4ee2da72e915f9edc&"
+local LOGO_ASSET_ID = "rbxassetid://0000000000" -- <- REEMPLAZA por tu assetId cuando subas el decal
 
 -------------------------
 --      SERVICIOS      --
@@ -61,7 +63,7 @@ local function isAllowedUser()
 end
 
 if not isAllowedPlace() or not isAllowedUser() then
-    warn("[Foxxy's Leaks] No autorizado en este lugar/usuario. Configura ALLOWED_* en el script.")
+    warn("[FoxxysLeaks] No autorizado en este lugar/usuario. Configura ALLOWED_* en el script.")
     return
 end
 
@@ -69,7 +71,7 @@ end
 --       GUI BASE      --
 -------------------------
 local gui = Instance.new("ScreenGui")
-gui.Name = "FoxxysLeaksUI"
+gui.Name = "FoxyLeaksUI"
 gui.ResetOnSpawn = false
 pcall(function() gui.Parent = game.CoreGui end)
 if not gui.Parent then gui.Parent = lp:WaitForChild("PlayerGui") end
@@ -129,19 +131,27 @@ info.Size = UDim2.new(1, -20, 0, 16)
 info.Position = UDim2.new(0, 10, 1, -22)
 info.Parent = loginFrame
 
-local function toast(txt)
+-- Notificador simple (SetCore)
+local function toast(txt, dur)
     pcall(function()
         StarterGui:SetCore("SendNotification", {
             Title = "Foxxy's Leaks";
             Text = txt;
-            Duration = 5;
+            Duration = dur or 5;
         })
     end)
 end
 
--- Banner de anuncio animado (entra por arriba y sale)
-local function bannerAnnounce(message)
-    local banner = Instance.new("Frame")
+-- Banner clicable (copia al hacer clic) — duración 9s
+local function clickableBanner(message, link, duration)
+    duration = duration or 9
+    local banner = Instance.new("TextButton")
+    banner.AutoButtonColor = true
+    banner.Text = message .. "  (clic para copiar)"
+    banner.Font = Enum.Font.GothamSemibold
+    banner.TextSize = 14
+    banner.TextXAlignment = Enum.TextXAlignment.Left
+    banner.TextColor3 = Color3.fromRGB(235,235,255)
     banner.Size = UDim2.new(1, -20, 0, 36)
     banner.Position = UDim2.new(0, 10, 0, -40)
     banner.BackgroundColor3 = Color3.fromRGB(28,28,40)
@@ -150,20 +160,17 @@ local function bannerAnnounce(message)
     banner.Parent = gui
     Instance.new("UICorner", banner).CornerRadius = UDim.new(0, 8)
 
-    local lbl = Instance.new("TextLabel")
-    lbl.BackgroundTransparency = 1
-    lbl.Size = UDim2.new(1, -20, 1, 0)
-    lbl.Position = UDim2.new(0, 10, 0, 0)
-    lbl.Font = Enum.Font.GothamSemibold
-    lbl.TextSize = 14
-    lbl.TextColor3 = Color3.fromRGB(235,235,255)
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Text = message
-    lbl.Parent = banner
-
     TS:Create(banner, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
         {Position = UDim2.new(0, 10, 0, 10)}):Play()
-    task.delay(4.5, function()
+
+    banner.MouseButton1Click:Connect(function()
+        if setclipboard then
+            setclipboard(link)
+            banner.Text = "¡Copiado! " .. link
+        end
+    end)
+
+    task.delay(duration, function()
         if banner and banner.Parent then
             TS:Create(banner, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
                 {Position = UDim2.new(0, 10, 0, -40)}):Play()
@@ -176,15 +183,15 @@ end
 --  VENTANA PRINCIPAL  --
 -------------------------
 local main = Instance.new("Frame")
-main.Size = UDim2.fromOffset(460, 0) -- aparecerá con animación
-main.Position = UDim2.new(0.5, -230, 0.2, 0)
-main.BackgroundColor3 = Color3.fromRGB(8,8,12) -- fondo oscuro (cielo)
+main.Size = UDim2.fromOffset(480, 0) -- aparecerá con animación
+main.Position = UDim2.new(0.5, -240, 0.2, 0)
+main.BackgroundColor3 = Color3.fromRGB(8,8,12)
 main.BorderSizePixel = 0
 main.Visible = false
 main.Parent = gui
 Instance.new("UICorner", main).CornerRadius = UDim.new(0, 14)
 
--- CAPA DE ESTRELLAS (detrás)
+-- Capa de estrellas (fondo)
 local starLayer = Instance.new("Frame")
 starLayer.BackgroundTransparency = 1
 starLayer.Size = UDim2.fromScale(1,1)
@@ -192,35 +199,45 @@ starLayer.ClipsDescendants = true
 starLayer.ZIndex = 0
 starLayer.Parent = main
 
--- CONTENIDO (encima)
+-- Contenido
 local content = Instance.new("Frame")
 content.BackgroundTransparency = 1
 content.Size = UDim2.fromScale(1,1)
 content.ZIndex = 2
 content.Parent = main
 
--- Barra superior (drag) + título
+-- TopBar con logo + título
 local topBar = Instance.new("Frame")
-topBar.Size = UDim2.new(1, 0, 0, 38)
+topBar.Size = UDim2.new(1, 0, 0, 44)
 topBar.BackgroundColor3 = Color3.fromRGB(16,16,24)
 topBar.BorderSizePixel = 0
 topBar.ZIndex = 3
 topBar.Parent = content
 Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 14)
 
+local logo = Instance.new("ImageLabel")
+logo.BackgroundTransparency = 1
+logo.Size = UDim2.fromOffset(32, 32)
+logo.Position = UDim2.new(0, 8, 0.5, -16)
+logo.ZIndex = 4
+logo.Parent = topBar
+-- Intenta URL directa (algunos ejecutores la soportan). Si no, usa assetId:
+local ok = pcall(function() logo.Image = LOGO_URL end)
+if not ok then logo.Image = LOGO_ASSET_ID end
+
 local titleMain = Instance.new("TextLabel")
 titleMain.BackgroundTransparency = 1
-titleMain.Size = UDim2.new(1, -12, 1, 0)
-titleMain.Position = UDim2.new(0, 12, 0, 0)
+titleMain.Size = UDim2.new(1, -52, 1, 0)
+titleMain.Position = UDim2.new(0, 48, 0, 0)
 titleMain.Font = Enum.Font.GothamBold
-titleMain.TextSize = 14
+titleMain.TextSize = 15
 titleMain.TextXAlignment = Enum.TextXAlignment.Left
 titleMain.TextColor3 = Color3.fromRGB(220,220,255)
-titleMain.Text = " Foxxy's Leaks   —  [L para ocultar/mostrar]"
+titleMain.Text = "Foxxy's Leaks  —  [L para ocultar/mostrar]"
 titleMain.ZIndex = 4
 titleMain.Parent = topBar
 
--- Pie con crédito del programador
+-- Pie con crédito
 local footer = Instance.new("TextLabel")
 footer.BackgroundTransparency = 1
 footer.Size = UDim2.new(1, -16, 0, 18)
@@ -229,7 +246,7 @@ footer.Font = Enum.Font.Gotham
 footer.TextSize = 12
 footer.TextXAlignment = Enum.TextXAlignment.Center
 footer.TextColor3 = Color3.fromRGB(150,150,170)
-footer.Text = "programador: by pedri.exe ceo Nakamy"
+footer.Text = "programador: by pedri.exe"
 footer.ZIndex = 4
 footer.Parent = content
 
@@ -263,7 +280,7 @@ end
 -- Tabs
 local tabs = Instance.new("Frame")
 tabs.Size = UDim2.new(1, -20, 0, 36)
-tabs.Position = UDim2.new(0, 10, 0, 46)
+tabs.Position = UDim2.new(0, 10, 0, 52)
 tabs.BackgroundTransparency = 1
 tabs.ZIndex = 3
 tabs.Parent = content
@@ -276,7 +293,7 @@ gridTabs.Parent = tabs
 local function makeTabBtn(text)
     local b = Instance.new("TextButton")
     b.AutoButtonColor = true
-    b.Size = UDim2.fromOffset(200, 32)
+    b.Size = UDim2.fromOffset(220, 32)
     b.BackgroundColor3 = Color3.fromRGB(28,28,40)
     b.TextColor3 = Color3.fromRGB(255,255,255)
     b.Font = Enum.Font.GothamBold
@@ -292,8 +309,8 @@ local tabMove = makeTabBtn("Movimiento")
 local tabVisual = makeTabBtn("Visual (debug)")
 
 local pages = Instance.new("Frame")
-pages.Size = UDim2.new(1, -20, 1, -46-36-18)
-pages.Position = UDim2.new(0, 10, 0, 46+36+8)
+pages.Size = UDim2.new(1, -20, 1, -52-36-18)
+pages.Position = UDim2.new(0, 10, 0, 52+36+8)
 pages.BackgroundTransparency = 1
 pages.ZIndex = 3
 pages.Parent = content
@@ -315,7 +332,6 @@ local function switchTo(which)
     pageMove.Visible = (which == "move")
     pageVisual.Visible = (which == "visual")
 end
-
 tabMove.MouseButton1Click:Connect(function() switchTo("move") end)
 tabVisual.MouseButton1Click:Connect(function() switchTo("visual") end)
 
@@ -394,7 +410,6 @@ local function setSpeed(v)
 end
 setSpeed(SPEED_DEFAULT)
 
--- Drag del knob + click en barra
 do
     local dragging = false
     local function update(inputPosX)
@@ -451,7 +466,6 @@ jumpLabel.TextColor3 = Color3.fromRGB(235,235,255)
 jumpLabel.ZIndex = 4
 jumpLabel.Parent = pageMove
 
--- Estado del salto
 local baseRecorded = false
 local baseUseJumpPower, baseJumpPower, baseJumpHeight
 local jumpMult = JUMP_MULT_DEFAULT
@@ -487,11 +501,10 @@ local function setJumpByRel(rel)
     jumpMult = JUMP_MULT_MIN + rel * (JUMP_MULT_MAX - JUMP_MULT_MIN)
     local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")
     if hum then applyJump(hum) end
-    -- Reposicionar knob
     jumpKnob.Position = UDim2.new(rel, -7, 0.5, -9)
 end
+setJumpByRel((JUMP_MULT_DEFAULT-JUMP_MULT_MIN)/(JUMP_MULT_MAX-JUMP_MULT_MIN))
 
--- Drag + click del slider de salto
 do
     local dragging = false
     local function update(inputPosX)
@@ -518,7 +531,7 @@ do
     end)
 end
 
--- Botones en Movimiento
+-- Botón Noclip
 local function makeBtnMove(text, y)
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(1, -20, 0, 36)
@@ -534,7 +547,6 @@ local function makeBtnMove(text, y)
     return b
 end
 
--- Estados
 local noclipOn = false
 local hbConn, steppedConn
 local originalCollide = {}
@@ -544,7 +556,6 @@ local function getHum()
     return c and c:FindFirstChildOfClass("Humanoid"), c and c:FindFirstChild("HumanoidRootPart")
 end
 
--- NOCLIP (anti-rebote)
 local function cacheDefaults(char)
     for _, p in ipairs(char:GetDescendants()) do
         if p:IsA("BasePart") and originalCollide[p] == nil then
@@ -562,7 +573,6 @@ local function setCharCollision(char, can)
 end
 local function enableNoclip()
     noclipOn = true
-    local hum, hrp = getHum()
     local char = lp.Character
     if char then cacheDefaults(char); setCharCollision(char, false) end
 
@@ -578,14 +588,14 @@ local function enableNoclip()
     if hbConn then hbConn:Disconnect() end
     hbConn = RS.Heartbeat:Connect(function(dt)
         if not noclipOn then return end
-        local hum2, hrp2 = getHum()
-        if not (hum2 and hrp2) then return end
-        local dir = hum2.MoveDirection
+        local hum, hrp = getHum()
+        if not (hum and hrp) then return end
+        local dir = hum.MoveDirection
         if dir.Magnitude > 0 then
-            local corr = dir.Unit * (hum2.WalkSpeed * dt * NOCLIP_CORRECTION_FACTOR)
-            hrp2.CFrame = hrp2.CFrame + Vector3.new(corr.X, 0, corr.Z)
+            local corr = dir.Unit * (hum.WalkSpeed * dt * NOCLIP_CORRECTION_FACTOR)
+            hrp.CFrame = hrp.CFrame + Vector3.new(corr.X, 0, corr.Z)
         end
-        hrp2.AssemblyAngularVelocity = Vector3.new()
+        hrp.AssemblyAngularVelocity = Vector3.new()
     end)
 end
 local function disableNoclip()
@@ -614,7 +624,7 @@ btnNoclip.MouseButton1Click:Connect(function()
 end)
 setBtnState(btnNoclip, "Atravesar paredes: ", noclipOn)
 
--- Mantener estados al respawn
+-- Mantener al respawn
 lp.CharacterAdded:Connect(function(char)
     originalCollide = {}
     local hum = char:WaitForChild("Humanoid", 10)
@@ -701,7 +711,6 @@ Players.PlayerRemoving:Connect(function(p)
     if highlights[p] then highlights[p]:Destroy(); highlights[p]=nil end
 end)
 
--- Botones Visual
 local function makeBtnVisual(parent, text, y)
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(1, -20, 0, 36)
@@ -750,15 +759,15 @@ setBtnState2(btnESP,   "Resaltar (rojo): ", showHighlight)
 local function openMain()
     if main.Visible then return end
     main.Visible = true
-    main.Size = UDim2.fromOffset(460, 0)
+    main.Size = UDim2.fromOffset(480, 0)
     TS:Create(main, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-        {Size = UDim2.fromOffset(460, 350)}):Play()
+        {Size = UDim2.fromOffset(480, 360)}):Play()
 end
 
 local function closeMain()
     if not main.Visible then return end
     TS:Create(main, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-        {Size = UDim2.fromOffset(460, 0)}):Play()
+        {Size = UDim2.fromOffset(480, 0)}):Play()
     task.delay(0.25, function() main.Visible = false end)
 end
 
@@ -776,9 +785,11 @@ end)
 -------------------------
 loginBtn.MouseButton1Click:Connect(function()
     if keyBox.Text == ACCESS_KEY then
-        -- Anuncios al activar key
-        toast("gracias por confiar en Foxxy's Leaks. Si tienes alguna duda, abre ticket en el Discord.")
-        bannerAnnounce("gracias por confiar en Foxxy's Leaks — si tienes alguna duda, abre ticket en el Discord")
+        -- Anuncio clicable de 9 segundos (copia el discord si haces click)
+        clickableBanner("bienvenido si nesesitas ayuda ven al discord "..DISCORD_LINK, DISCORD_LINK, 9)
+
+        -- (Opcional) También un toast de respaldo
+        toast("Bienvenido. Si necesitas ayuda, ven al Discord.", 5)
 
         TS:Create(loginFrame, TweenInfo.new(0.2), {Size = UDim2.fromOffset(360, 0)}):Play()
         task.delay(0.2, function()
@@ -786,7 +797,7 @@ loginBtn.MouseButton1Click:Connect(function()
             openMain()
         end)
     else
-        toast("Key incorrecta.")
+        toast("Key incorrecta.", 5)
         loginBtn.BackgroundColor3 = Color3.fromRGB(150,50,50)
         task.delay(0.4, function()
             loginBtn.BackgroundColor3 = Color3.fromRGB(45,130,90)
