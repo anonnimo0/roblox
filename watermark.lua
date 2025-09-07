@@ -1,8 +1,8 @@
---// Admin/Debug UI (para TU experiencia)
---// Login con key -> 2 menús: Movimiento (velocidad, noclip, salto leve) y Visual (nombres + highlight)
---// Fondo animado de estrellas
---// Tecla L para ocultar/mostrar
---// Ajusta ALLOWED_PLACE_IDS / ALLOWED_USER_IDS si quieres restringir su uso
+--// 𝙁𝙤𝙭𝙭𝙮's 𝙇𝙚𝙖𝙠𝙨 — Admin/Debug UI (para TU experiencia)
+--// Login con key -> 2 menús: Movimiento (velocidad, noclip, salto regulable) y Visual (nombres + highlight)
+--// Fondo de estrellas animadas, tecla L para ocultar/mostrar
+--// Pie: "programador: by pedri.exe"
+--// Opcional: limita por PlaceId/UserId para uso solo en tu juego
 
 -------------------------
 --    CONFIGURACIÓN    --
@@ -22,12 +22,12 @@ local ALLOWED_USER_IDS = {
 -- Velocidad (WalkSpeed)
 local SPEED_MIN, SPEED_MAX, SPEED_DEFAULT = 8, 100, 16
 
--- Salto leve (multiplica o suma suave)
-local JUMP_MULT   = 1.25   -- 25% más
-local JUMP_BONUS  = 8      -- o +8, se toma el mayor entre multiplicar y sumar
-local JUMP_MAXADD = 20     -- nunca sumará más de +20 sobre el valor base
+-- Salto (slider como multiplicador del salto base)
+local JUMP_MULT_MIN, JUMP_MULT_MAX, JUMP_MULT_DEFAULT = 0.9, 1.6, 1.25
+-- Límite de aumento máximo absoluto para evitar saltos exagerados
+local JUMP_MAX_ABS_ADD = 28
 
--- Noclip anti-rebote: fuerza correctiva (0.85 recomendado; sube a 1.2 si hay muros MUY gruesos)
+-- Noclip anti-rebote: fuerza correctiva (0.85 recomendado; sube a 1.2 si hay muros muy gruesos)
 local NOCLIP_CORRECTION_FACTOR = 0.85
 
 -------------------------
@@ -37,6 +37,7 @@ local Players = game:GetService("Players")
 local UIS     = game:GetService("UserInputService")
 local TS      = game:GetService("TweenService")
 local RS      = game:GetService("RunService")
+local StarterGui = game:GetService("StarterGui")
 
 local lp = Players.LocalPlayer
 
@@ -60,7 +61,7 @@ local function isAllowedUser()
 end
 
 if not isAllowedPlace() or not isAllowedUser() then
-    warn("[AdminUI] No autorizado en este lugar/usuario. Configura ALLOWED_* en el script.")
+    warn("[FoxyLeaks] No autorizado en este lugar/usuario. Configura ALLOWED_* en el script.")
     return
 end
 
@@ -68,7 +69,7 @@ end
 --       GUI BASE      --
 -------------------------
 local gui = Instance.new("ScreenGui")
-gui.Name = "AdminDebugUI"
+gui.Name = "FoxyLeaksUI"
 gui.ResetOnSpawn = false
 pcall(function() gui.Parent = game.CoreGui end)
 if not gui.Parent then gui.Parent = lp:WaitForChild("PlayerGui") end
@@ -89,7 +90,7 @@ title.BackgroundTransparency = 1
 title.Font = Enum.Font.GothamBold
 title.TextSize = 16
 title.TextColor3 = Color3.fromRGB(235,235,255)
-title.Text = "Login — pedri.exe"
+title.Text = "𝙁𝙤𝙭𝙭𝙮's 𝙇𝙚𝙖𝙠𝙨 — Login"
 title.Size = UDim2.new(1, -20, 0, 32)
 title.Position = UDim2.new(0, 10, 0, 10)
 title.Parent = loginFrame
@@ -130,11 +131,44 @@ info.Parent = loginFrame
 
 local function toast(txt)
     pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "pedri.exe";
+        StarterGui:SetCore("SendNotification", {
+            Title = "𝙁𝙤𝙭𝙭𝙮's 𝙇𝙚𝙖𝙠𝙨";
             Text = txt;
-            Duration = 4;
+            Duration = 5;
         })
+    end)
+end
+
+-- Banner de anuncio animado (entra por arriba y sale)
+local function bannerAnnounce(message)
+    local banner = Instance.new("Frame")
+    banner.Size = UDim2.new(1, -20, 0, 36)
+    banner.Position = UDim2.new(0, 10, 0, -40)
+    banner.BackgroundColor3 = Color3.fromRGB(28,28,40)
+    banner.BorderSizePixel = 0
+    banner.ZIndex = 100
+    banner.Parent = gui
+    Instance.new("UICorner", banner).CornerRadius = UDim.new(0, 8)
+
+    local lbl = Instance.new("TextLabel")
+    lbl.BackgroundTransparency = 1
+    lbl.Size = UDim2.new(1, -20, 1, 0)
+    lbl.Position = UDim2.new(0, 10, 0, 0)
+    lbl.Font = Enum.Font.GothamSemibold
+    lbl.TextSize = 14
+    lbl.TextColor3 = Color3.fromRGB(235,235,255)
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Text = message
+    lbl.Parent = banner
+
+    TS:Create(banner, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {Position = UDim2.new(0, 10, 0, 10)}):Play()
+    task.delay(4.5, function()
+        if banner and banner.Parent then
+            TS:Create(banner, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+                {Position = UDim2.new(0, 10, 0, -40)}):Play()
+            task.delay(0.25, function() if banner then banner:Destroy() end end)
+        end
     end)
 end
 
@@ -142,8 +176,8 @@ end
 --  VENTANA PRINCIPAL  --
 -------------------------
 local main = Instance.new("Frame")
-main.Size = UDim2.fromOffset(420, 0) -- aparecerá con animación
-main.Position = UDim2.new(0.5, -210, 0.2, 0)
+main.Size = UDim2.fromOffset(460, 0) -- aparecerá con animación
+main.Position = UDim2.new(0.5, -230, 0.2, 0)
 main.BackgroundColor3 = Color3.fromRGB(8,8,12) -- fondo oscuro (cielo)
 main.BorderSizePixel = 0
 main.Visible = false
@@ -165,7 +199,7 @@ content.Size = UDim2.fromScale(1,1)
 content.ZIndex = 2
 content.Parent = main
 
--- Barra superior (drag)
+-- Barra superior (drag) + título
 local topBar = Instance.new("Frame")
 topBar.Size = UDim2.new(1, 0, 0, 38)
 topBar.BackgroundColor3 = Color3.fromRGB(16,16,24)
@@ -182,9 +216,22 @@ titleMain.Font = Enum.Font.GothamBold
 titleMain.TextSize = 14
 titleMain.TextXAlignment = Enum.TextXAlignment.Left
 titleMain.TextColor3 = Color3.fromRGB(220,220,255)
-titleMain.Text = "Admin — pedri.exe  [L para ocultar/mostrar]"
+titleMain.Text = "𝙁𝙤𝙭𝙭𝙮's 𝙇𝙚𝙖𝙠𝙨  —  [L para ocultar/mostrar]"
 titleMain.ZIndex = 4
 titleMain.Parent = topBar
+
+-- Pie con crédito del programador
+local footer = Instance.new("TextLabel")
+footer.BackgroundTransparency = 1
+footer.Size = UDim2.new(1, -16, 0, 18)
+footer.Position = UDim2.new(0, 8, 1, -20)
+footer.Font = Enum.Font.Gotham
+footer.TextSize = 12
+footer.TextXAlignment = Enum.TextXAlignment.Center
+footer.TextColor3 = Color3.fromRGB(150,150,170)
+footer.Text = "programador: by pedri.exe"
+footer.ZIndex = 4
+footer.Parent = content
 
 -- Drag ventana
 do
@@ -229,7 +276,7 @@ gridTabs.Parent = tabs
 local function makeTabBtn(text)
     local b = Instance.new("TextButton")
     b.AutoButtonColor = true
-    b.Size = UDim2.fromOffset(180, 32)
+    b.Size = UDim2.fromOffset(200, 32)
     b.BackgroundColor3 = Color3.fromRGB(28,28,40)
     b.TextColor3 = Color3.fromRGB(255,255,255)
     b.Font = Enum.Font.GothamBold
@@ -276,7 +323,6 @@ tabVisual.MouseButton1Click:Connect(function() switchTo("visual") end)
 --  ESTRELLAS (fondo)  --
 -------------------------
 local function spawnStars(container, count)
-    -- Esperar a obtener tamaño absoluto
     if container.AbsoluteSize.X < 1 then task.wait() end
     local w, h = container.AbsoluteSize.X, container.AbsoluteSize.Y
     for i=1, count do
@@ -292,18 +338,17 @@ local function spawnStars(container, count)
 
         task.spawn(function()
             while s.Parent do
-                local startY = s.Position.Y.Offset
                 local endY = h + 10
                 local dur = math.random(4,9) + math.random()
-                s.Position = UDim2.fromOffset(math.random(0, w), startY)
-                TS:Create(s, TweenInfo.new(dur, Enum.EasingStyle.Linear), {Position = UDim2.fromOffset(s.Position.X.Offset, endY)}):Play()
+                TS:Create(s, TweenInfo.new(dur, Enum.EasingStyle.Linear),
+                    {Position = UDim2.fromOffset(s.Position.X.Offset, endY)}):Play()
                 task.wait(dur)
                 s.Position = UDim2.fromOffset(math.random(0, w), -10)
             end
         end)
     end
 end
-spawnStars(starLayer, 60)
+spawnStars(starLayer, 70)
 
 -------------------------
 --   MOVIMIENTO (UI)   --
@@ -377,6 +422,102 @@ do
     end)
 end
 
+-- Slider de salto (multiplicador)
+local jumpBack = Instance.new("Frame")
+jumpBack.Size = UDim2.new(1, -20, 0, 10)
+jumpBack.Position = UDim2.new(0, 10, 0, 70)
+jumpBack.BackgroundColor3 = Color3.fromRGB(42,42,60)
+jumpBack.BorderSizePixel = 0
+jumpBack.ZIndex = 3
+jumpBack.Parent = pageMove
+Instance.new("UICorner", jumpBack).CornerRadius = UDim.new(0, 6)
+
+local jumpKnob = Instance.new("Frame")
+jumpKnob.Size = UDim2.fromOffset(14, 18)
+jumpKnob.Position = UDim2.new((JUMP_MULT_DEFAULT-JUMP_MULT_MIN)/(JUMP_MULT_MAX-JUMP_MULT_MIN), -7, 0.5, -9)
+jumpKnob.BackgroundColor3 = Color3.fromRGB(90,120,200)
+jumpKnob.BorderSizePixel = 0
+jumpKnob.ZIndex = 4
+jumpKnob.Parent = jumpBack
+Instance.new("UICorner", jumpKnob).CornerRadius = UDim.new(1, 0)
+
+local jumpLabel = Instance.new("TextLabel")
+jumpLabel.BackgroundTransparency = 1
+jumpLabel.Position = UDim2.new(0, 10, 0, 92)
+jumpLabel.Size = UDim2.new(1, -20, 0, 20)
+jumpLabel.Font = Enum.Font.Gotham
+jumpLabel.TextSize = 14
+jumpLabel.TextColor3 = Color3.fromRGB(235,235,255)
+jumpLabel.ZIndex = 4
+jumpLabel.Parent = pageMove
+
+-- Estado del salto
+local baseRecorded = false
+local baseUseJumpPower, baseJumpPower, baseJumpHeight
+local jumpMult = JUMP_MULT_DEFAULT
+
+local function recordBaseJump(hum)
+    if baseRecorded then return end
+    baseUseJumpPower = hum.UseJumpPower
+    if baseUseJumpPower then
+        baseJumpPower = hum.JumpPower
+    else
+        baseJumpHeight = hum.JumpHeight
+    end
+    baseRecorded = true
+end
+
+local function applyJump(hum)
+    if not hum then return end
+    recordBaseJump(hum)
+    if baseUseJumpPower then
+        local target = baseJumpPower * jumpMult
+        target = math.min(baseJumpPower + JUMP_MAX_ABS_ADD, target)
+        hum.JumpPower = target
+        jumpLabel.Text = string.format("Salto: x%.2f  (%d)", jumpMult, math.floor(target + 0.5))
+    else
+        local target = baseJumpHeight * jumpMult
+        target = math.min(baseJumpHeight + (JUMP_MAX_ABS_ADD/8), target)
+        hum.JumpHeight = target
+        jumpLabel.Text = string.format("Salto: x%.2f", jumpMult)
+    end
+end
+
+local function setJumpByRel(rel)
+    jumpMult = JUMP_MULT_MIN + rel * (JUMP_MULT_MAX - JUMP_MULT_MIN)
+    local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")
+    if hum then applyJump(hum) end
+    -- Reposicionar knob
+    jumpKnob.Position = UDim2.new(rel, -7, 0.5, -9)
+end
+
+-- Drag + click del slider de salto
+do
+    local dragging = false
+    local function update(inputPosX)
+        local rel = math.clamp((inputPosX - jumpBack.AbsolutePosition.X)/jumpBack.AbsoluteSize.X, 0, 1)
+        setJumpByRel(rel)
+    end
+    jumpKnob.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            inp.Changed:Connect(function()
+                if inp.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    UIS.InputChanged:Connect(function(inp)
+        if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
+            update(inp.Position.X)
+        end
+    end)
+    jumpBack.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            update(inp.Position.X)
+        end
+    end)
+end
+
 -- Botones en Movimiento
 local function makeBtnMove(text, y)
     local b = Instance.new("TextButton")
@@ -396,18 +537,14 @@ end
 -- Estados
 local noclipOn = false
 local hbConn, steppedConn
-local baseJumpRecorded = false
-local baseUseJumpPower, baseJumpPower, baseJumpHeight
-local saltoLeveOn = false
+local originalCollide = {}
 
--- Utilidades humanoide
 local function getHum()
     local c = lp.Character
     return c and c:FindFirstChildOfClass("Humanoid"), c and c:FindFirstChild("HumanoidRootPart")
 end
 
 -- NOCLIP (anti-rebote)
-local originalCollide = {}
 local function cacheDefaults(char)
     for _, p in ipairs(char:GetDescendants()) do
         if p:IsA("BasePart") and originalCollide[p] == nil then
@@ -466,82 +603,31 @@ local function disableNoclip()
     end
 end
 
--- SALTO LEVE
-local function recordBaseJump(hum)
-    if baseJumpRecorded then return end
-    baseUseJumpPower = hum.UseJumpPower
-    if hum.UseJumpPower then
-        baseJumpPower = hum.JumpPower
-    else
-        baseJumpHeight = hum.JumpHeight
-    end
-    baseJumpRecorded = true
-end
-
-local function setSaltoLeve(on)
-    local hum = getHum()
-    hum = hum
-    if not hum then return end
-    recordBaseJump(hum)
-    saltoLeveOn = on
-    if on then
-        if hum.UseJumpPower then
-            local target = math.max(baseJumpPower * JUMP_MULT, baseJumpPower + JUMP_BONUS)
-            target = math.min(baseJumpPower + JUMP_MAXADD, target)
-            hum.JumpPower = target
-        else
-            local target = math.max(baseJumpHeight * JUMP_MULT, baseJumpHeight + (JUMP_BONUS/8))
-            target = math.min(baseJumpHeight + (JUMP_MAXADD/8), target)
-            hum.JumpHeight = target
-        end
-    else
-        if hum.UseJumpPower and baseJumpPower then
-            hum.JumpPower = baseJumpPower
-        elseif baseJumpHeight then
-            hum.JumpHeight = baseJumpHeight
-        end
-    end
-end
-
--- Botones
-local btnNoclip = makeBtnMove("Atravesar paredes: OFF", 62)
-local btnSalto  = makeBtnMove("Salto leve: OFF",          108)
-
+local btnNoclip = makeBtnMove("Atravesar paredes: OFF", 124)
 local function setBtnState(b, label, on)
     b.Text = label .. (on and "ON" or "OFF")
     b.BackgroundColor3 = on and Color3.fromRGB(45,130,90) or Color3.fromRGB(120,50,50)
 end
-
 btnNoclip.MouseButton1Click:Connect(function()
     if noclipOn then disableNoclip() else enableNoclip() end
     setBtnState(btnNoclip, "Atravesar paredes: ", noclipOn)
 end)
-
-btnSalto.MouseButton1Click:Connect(function()
-    setSaltoLeve(not saltoLeveOn)
-    setBtnState(btnSalto, "Salto leve: ", saltoLeveOn)
-end)
-
 setBtnState(btnNoclip, "Atravesar paredes: ", noclipOn)
-setBtnState(btnSalto,  "Salto leve: ",      saltoLeveOn)
 
--- Mantener estado al respawn
+-- Mantener estados al respawn
 lp.CharacterAdded:Connect(function(char)
     originalCollide = {}
-    char:WaitForChild("Humanoid", 10)
+    local hum = char:WaitForChild("Humanoid", 10)
     char:WaitForChild("HumanoidRootPart", 10)
+    if hum then
+        hum.WalkSpeed = currentSpeed
+        baseRecorded = false
+        recordBaseJump(hum)
+        applyJump(hum)
+    end
     if noclipOn then
         task.wait(0.1)
         setCharCollision(char, false)
-    end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.WalkSpeed = currentSpeed
-        if saltoLeveOn then
-            baseJumpRecorded = false
-            recordBaseJump(hum)
-            setSaltoLeve(true)
-        end
     end
 end)
 
@@ -664,15 +750,15 @@ setBtnState2(btnESP,   "Resaltar (rojo): ", showHighlight)
 local function openMain()
     if main.Visible then return end
     main.Visible = true
-    main.Size = UDim2.fromOffset(420, 0)
+    main.Size = UDim2.fromOffset(460, 0)
     TS:Create(main, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-        {Size = UDim2.fromOffset(420, 320)}):Play()
+        {Size = UDim2.fromOffset(460, 350)}):Play()
 end
 
 local function closeMain()
     if not main.Visible then return end
     TS:Create(main, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-        {Size = UDim2.fromOffset(420, 0)}):Play()
+        {Size = UDim2.fromOffset(460, 0)}):Play()
     task.delay(0.25, function() main.Visible = false end)
 end
 
@@ -690,7 +776,10 @@ end)
 -------------------------
 loginBtn.MouseButton1Click:Connect(function()
     if keyBox.Text == ACCESS_KEY then
-        toast("Key correcta. Bienvenido.")
+        -- Anuncios al activar key
+        toast("gracias por confiar en 𝙁𝙤𝙭𝙭𝙮's 𝙇𝙚𝙖𝙠𝙨. Si tienes alguna duda, abre ticket en el Discord.")
+        bannerAnnounce("gracias por confiar en 𝙁𝙤𝙭𝙭𝙮's 𝙇𝙚𝙖𝙠𝙨 — si tienes alguna duda, abre ticket en el Discord")
+
         TS:Create(loginFrame, TweenInfo.new(0.2), {Size = UDim2.fromOffset(360, 0)}):Play()
         task.delay(0.2, function()
             loginFrame.Visible = false
