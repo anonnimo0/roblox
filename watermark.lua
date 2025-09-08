@@ -1,43 +1,40 @@
---// Foxxy's Leaks — Admin/Debug UI (ESTILO DURO)
---// Login (scanline+glow) -> Sidebar con 5 menús: Movimiento, Aimbot, Visual, Otros, Créditos
---// Sliders "duros", aimbot con FOV+color+smooth y tecla configurable, tecla L para ocultar/mostrar
---// Pie: "programador: by pedri.exe" + Usuario (DisplayName @Username)
+--// Foxxy's Leaks — Admin/Debug UI (HARD THEME)
+--// Carga 10s -> Login -> Menú (Movimiento, Aimbot, Visual, Otros, Créditos)
+--// Programador: by pedri.exe | Discord: https://discord.gg/FDjHggJF | Versión 1.30.130
+--// Úsalo solo como util de admin/debug en tus propios juegos.
 
 -------------------------
 --    CONFIGURACIÓN    --
 -------------------------
 local ACCESS_KEY = "HJGL-FKSS"
 
--- Restringe a tus lugares/usuarios (opcional). Déjalo vacío para no restringir.
+-- Opcional: restringir a lugares/usuarios
 local ALLOWED_PLACE_IDS = { }
 local ALLOWED_USER_IDS  = { }
 
--- Velocidad (WalkSpeed)
+-- Movimiento
 local SPEED_MIN, SPEED_MAX, SPEED_DEFAULT = 8, 120, 16
-
--- Salto (multiplicador via slider)
+local FLY_SPEED_MIN, FLY_SPEED_MAX, FLY_SPEED_DEFAULT = 16, 240, 64
 local JUMP_MULT_MIN, JUMP_MULT_MAX, JUMP_MULT_DEFAULT = 0.9, 1.8, 1.25
 local JUMP_MAX_ABS_ADD = 32
-
--- Noclip anti-rebote
 local NOCLIP_CORRECTION_FACTOR = 0.88
-
--- Fly
-local FLY_SPEED_MIN, FLY_SPEED_MAX, FLY_SPEED_DEFAULT = 16, 240, 64
 local FLY_TILT_STIFFNESS = 8
 
--- Freecam (modo foto)
+-- Freecam (Otros)
 local FC_SPEED_DEFAULT = 40
 local FC_SENS = Vector2.new(0.003, 0.003)
 
 -- Aimbot
-local AIM_FOV_MIN, AIM_FOV_MAX, AIM_FOV_DEFAULT = 30, 500, 200
-local AIM_SMOOTH_MIN, AIM_SMOOTH_MAX, AIM_SMOOTH_DEFAULT = 0.0, 0.6, 0.22 -- ahora ajustable
+local AIM_FOV_MIN, AIM_FOV_MAX, AIM_FOV_DEFAULT = 30, 500, 220
+-- Intensidad 1..100 -> factor de seguimiento por frame (más alto = sigue más fuerte)
+local AIM_INT_MIN, AIM_INT_MAX, AIM_INT_DEFAULT = 1, 100, 60
 
--- Discord y logo
-local DISCORD_LINK = "https://discord.gg/xQbpCEgz9E"
-local LOGO_URL = "https://cdn.discordapp.com/attachments/1392752518148395119/1413517337851592805/c851ab41-8a9e-4458-8235-cf4479d3a0ce.png?ex=68be325b&is=68bce0db&hm=2b8ce5b8398729a2f08ecf597497755d416755ae837ba8e4ee2da72e915f9edc&"
-local LOGO_ASSET_ID = "rbxassetid://0" -- si subes el decal, cambia por su assetId
+-- Visual
+local USE_TEAMS_ONLY = true -- si hay Teams, marcar en rojo solo enemigos (otros equipos)
+
+-- Identidad/branding
+local TITLE = "Foxxy's Leaks"
+local DISCORD_LINK = "https://discord.gg/FDjHggJF"
 
 -------------------------
 --      SERVICIOS      --
@@ -48,12 +45,12 @@ local TS        = game:GetService("TweenService")
 local RS        = game:GetService("RunService")
 local SG        = game:GetService("StarterGui")
 local Workspace = game:GetService("Workspace")
-local Lighting  = game:GetService("Lighting")
+local Teams     = game:GetService("Teams")
 
 local lp = Players.LocalPlayer
 
 -------------------------
---     AUTORIZACIÓN    --
+--   AUTORIZACIÓN      --
 -------------------------
 local function isAllowedPlace()
     if #ALLOWED_PLACE_IDS == 0 then return true end
@@ -66,93 +63,88 @@ local function isAllowedUser()
     return false
 end
 if not isAllowedPlace() or not isAllowedUser() then
-    warn("[FoxxysLeaks] No autorizado en este lugar/usuario. Configura ALLOWED_* en el script.")
+    warn("[FoxxysLeaks] No autorizado en este lugar/usuario.")
     return
 end
 
 -------------------------
---     UTILIDADES UI   --
+--   UTILES / FACTORY  --
 -------------------------
-local function mk(instance, props, parent)
-    local o = Instance.new(instance)
-    for k,v in pairs(props or {}) do o[k]=v end
-    if parent then o.Parent=parent end
+local function mk(class, props, parent)
+    local o = Instance.new(class)
+    if props then for k,v in pairs(props) do o[k]=v end end
+    if parent then o.Parent = parent end
     return o
 end
 
--- Slider “duro”: barra + relleno + knob rectangular
-local function makeHardSlider(parent, posY, minV, maxV, defaultV, color, onChange)
-    local cont = mk("Frame", {Size=UDim2.new(1,-24,0,24), Position=UDim2.new(0,12,0,posY), BackgroundTransparency=1, ZIndex=5}, parent)
-    local bar  = mk("Frame", {Size=UDim2.new(1,0,0,10), Position=UDim2.new(0,0,0,7), BackgroundColor3=Color3.fromRGB(35,35,50), BorderSizePixel=0}, cont)
-    local stroke=mk("UIStroke",{Thickness=1.5, Transparency=0.35, Color=Color3.fromRGB(80,80,120)}, bar)
-    local fill = mk("Frame", {Size=UDim2.new(0,0,1,0), BackgroundColor3=color or Color3.fromRGB(90,160,255), BorderSizePixel=0}, bar)
-    local knob = mk("Frame", {Size=UDim2.fromOffset(12,16), BackgroundColor3=Color3.fromRGB(230,230,255), BorderSizePixel=0}, cont)
-    mk("UIStroke",{Thickness=1.2, Transparency=0.2, Color=Color3.fromRGB(120,120,160)}, knob)
-
-    local value = defaultV
-    local dragging = false
-
-    local function setByRel(rel)
-        rel = math.clamp(rel,0,1)
-        local v = minV + rel*(maxV-minV)
-        value = v
-        fill.Size = UDim2.new(rel,0,1,0)
-        knob.Position = UDim2.new(rel,-6,0,4)
-        if onChange then onChange(v) end
-    end
-
-    local function relFromAbs(x)
-        return math.clamp((x - bar.AbsolutePosition.X)/bar.AbsoluteSize.X, 0, 1)
-    end
-
-    bar.InputBegan:Connect(function(inp)
-        if inp.UserInputType==Enum.UserInputType.MouseButton1 then setByRel(relFromAbs(inp.Position.X)); dragging=true end
+-- Botón con animaciones (hover/click) y estado ON/OFF
+local function styleButton(btn)
+    local base = btn.BackgroundColor3
+    local over = Color3.fromRGB(40,40,70)
+    btn.MouseEnter:Connect(function()
+        TS:Create(btn, TweenInfo.new(0.12), {BackgroundColor3 = over}):Play()
     end)
-    knob.InputBegan:Connect(function(inp)
-        if inp.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true end
+    btn.MouseLeave:Connect(function()
+        TS:Create(btn, TweenInfo.new(0.12), {BackgroundColor3 = base}):Play()
     end)
-    UIS.InputEnded:Connect(function(inp)
-        if inp.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end
+    btn.MouseButton1Down:Connect(function()
+        local s = Instance.new("UIScale", btn); s.Scale = 1
+        TS:Create(s, TweenInfo.new(0.08), {Scale = 0.96}):Play()
+        task.delay(0.12, function() if s then s:Destroy() end end)
     end)
-    UIS.InputChanged:Connect(function(inp)
-        if dragging and (inp.UserInputType==Enum.UserInputType.MouseMovement or inp.UserInputType==Enum.UserInputType.Touch) then
-            setByRel(relFromAbs(inp.Position.X))
-        end
-    end)
-
-    -- inicio
-    if defaultV then
-        local rel = (defaultV - minV)/(maxV-minV)
-        setByRel(rel)
-    else
-        setByRel(0)
-    end
-
-    return {
-        get=function() return value end,
-        set=function(v) setByRel((v-minV)/(maxV-minV)) end,
-        setColor=function(c) fill.BackgroundColor3=c end
-    }
 end
-
-local function makeToggle(parent, text, posY, onClick)
-    local btn = mk("TextButton",{
-        Size=UDim2.new(1,-24,0,32), Position=UDim2.new(0,12,0,posY),
-        BackgroundColor3=Color3.fromRGB(28,28,40), BorderSizePixel=0,
-        Font=Enum.Font.GothamBold, TextSize=14, TextColor3=Color3.new(1,1,1), Text=text, ZIndex=5
-    }, parent)
-    mk("UIStroke",{Thickness=1.5, Transparency=0.45, Color=Color3.fromRGB(70,70,110)}, btn)
-    btn.MouseButton1Click:Connect(function() if onClick then onClick(btn) end end)
-    return btn
-end
-
-local function setBtnState(btn, label, state)
+local function setToggle(btn, label, state)
     btn.Text = label .. (state and "ON" or "OFF")
     btn.BackgroundColor3 = state and Color3.fromRGB(45,130,90) or Color3.fromRGB(120,50,50)
 end
 
+-- Slider duro (barra, fill, knob recto)
+local function hardSlider(parent, y, minV, maxV, defV, color, onChange)
+    local cont = mk("Frame",{Size=UDim2.new(1,-24,0,28), Position=UDim2.new(0,12,0,y), BackgroundTransparency=1, ZIndex=5}, parent)
+    local label = mk("TextLabel",{BackgroundTransparency=1, Size=UDim2.new(1,0,0,14), Position=UDim2.new(0,0,0,0),
+        Font=Enum.Font.Gotham, TextSize=12, TextColor3=Color3.fromRGB(220,220,240), Text="Slider"}, cont)
+    local bar = mk("Frame",{Size=UDim2.new(1,0,0,10), Position=UDim2.new(0,0,0,16), BackgroundColor3=Color3.fromRGB(32,32,46), BorderSizePixel=0}, cont)
+    mk("UIStroke",{Thickness=1.5, Transparency=0.4, Color=Color3.fromRGB(70,80,130)}, bar)
+    local fill = mk("Frame",{Size=UDim2.new(0,0,1,0), BackgroundColor3=color or Color3.fromRGB(90,160,255), BorderSizePixel=0}, bar)
+    local knob = mk("Frame",{Size=UDim2.fromOffset(12,16), Position=UDim2.new(0,-6,0,13), BackgroundColor3=Color3.fromRGB(230,230,255), BorderSizePixel=0}, cont)
+    mk("UIStroke",{Thickness=1.2, Transparency=0.25, Color=Color3.fromRGB(120,120,160)}, knob)
+
+    styleButton(knob)
+
+    local value = defV or minV
+    local dragging = false
+    local function setRel(rel)
+        rel = math.clamp(rel,0,1)
+        value = minV + rel*(maxV-minV)
+        fill.Size = UDim2.new(rel,0,1,0)
+        knob.Position = UDim2.new(rel,-6,0,13)
+        if onChange then onChange(value, label) end
+    end
+    local function relFromX(x) return (x - bar.AbsolutePosition.X)/bar.AbsoluteSize.X end
+
+    bar.InputBegan:Connect(function(inp) if inp.UserInputType==Enum.UserInputType.MouseButton1 then setRel(relFromX(inp.Position.X)) dragging=true end end)
+    knob.InputBegan:Connect(function(inp) if inp.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true end end)
+    UIS.InputEnded:Connect(function(inp) if inp.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end end)
+    UIS.InputChanged:Connect(function(inp)
+        if dragging and (inp.UserInputType==Enum.UserInputType.MouseMovement or inp.UserInputType==Enum.UserInputType.Touch) then
+            setRel(relFromX(inp.Position.X))
+        end
+    end)
+
+    task.defer(function()
+        setRel((value - minV)/(maxV-minV))
+    end)
+
+    return {
+        setLabel=function(t) label.Text=t end,
+        set=function(v) setRel((v-minV)/(maxV-minV)) end,
+        get=function() return value end,
+        setColor=function(c) fill.BackgroundColor3=c end
+    }
+end
+
 -------------------------
---        GUI BASE     --
+--   PANTALLA CARGA    --
 -------------------------
 local gui = Instance.new("ScreenGui")
 gui.Name = "FoxyLeaksUI"
@@ -160,83 +152,79 @@ gui.ResetOnSpawn = false
 pcall(function() gui.Parent = game.CoreGui end)
 if not gui.Parent then gui.Parent = lp:WaitForChild("PlayerGui") end
 
--------------------------
---      LOGIN NUEVO    --
--------------------------
--- overlay oscuro + “scanlines” y glow en el panel
-local loginOverlay = mk("Frame",{Size=UDim2.fromScale(1,1), BackgroundColor3=Color3.new(0,0,0), BackgroundTransparency=0.3, ZIndex=50}, gui)
-local scan = mk("Frame",{Size=UDim2.fromScale(1,1), BackgroundTransparency=1, ZIndex=51}, loginOverlay)
-do
-    -- scanlines con gradient animado
-    local g = mk("UIGradient",{}, scan)
-    g.Color = ColorSequence.new(Color3.fromRGB(0,0,0), Color3.fromRGB(20,20,30))
-    g.Rotation = 90
-    TS:Create(g, TweenInfo.new(2.8, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, math.huge, true), {Offset=Vector2.new(0,0.2)}):Play()
-end
+local loader = mk("Frame",{Size=UDim2.fromScale(1,1), BackgroundColor3=Color3.fromRGB(5,5,10)}, gui)
+local barBox = mk("Frame",{Size=UDim2.new(0.5,0,0,12), Position=UDim2.new(0.25,0,0.6,0),
+    BackgroundColor3=Color3.fromRGB(18,18,26), BorderSizePixel=0}, loader)
+mk("UIStroke",{Thickness=2, Transparency=0.2, Color=Color3.fromRGB(80,140,255)}, barBox)
+local barFill = mk("Frame",{Size=UDim2.new(0,0,1,0), BackgroundColor3=Color3.fromRGB(80,140,255), BorderSizePixel=0}, barBox)
+local txtLoad = mk("TextLabel",{BackgroundTransparency=1, Size=UDim2.new(1,0,0,24), Position=UDim2.new(0,0,0.6,-36),
+    Font=Enum.Font.GothamBlack, TextSize=18, TextColor3=Color3.fromRGB(220,220,255), Text="Ajustando el juego …"}, loader)
 
-local loginFrame = mk("Frame",{
-    Size=UDim2.fromOffset(400, 210), Position=UDim2.new(0.5,-200, 0.35,0),
-    BackgroundColor3=Color3.fromRGB(16,16,24), BorderSizePixel=0, ZIndex=60
+-- animación puntos
+task.spawn(function()
+    local dots = 0
+    while loader.Parent do
+        dots = (dots+1)%4
+        txtLoad.Text = "Ajustando el juego " .. string.rep(".", dots)
+        task.wait(0.5)
+    end
+end)
+
+-- Progreso 10s
+task.spawn(function()
+    local dur = 10
+    local t0 = os.clock()
+    while os.clock() - t0 < dur do
+        local rel = (os.clock()-t0)/dur
+        barFill.Size = UDim2.new(rel,0,1,0)
+        task.wait()
+    end
+    barFill.Size = UDim2.new(1,0,1,0)
+end)
+
+-------------------------
+--        LOGIN        --
+-------------------------
+local loginOverlay = mk("Frame",{Size=UDim2.fromScale(1,1), BackgroundTransparency=1, ZIndex=50}, gui)
+local login = mk("Frame",{
+    Size=UDim2.fromOffset(420, 210), Position=UDim2.new(0.5,-210, 0.35,0),
+    BackgroundColor3=Color3.fromRGB(12,12,18), BorderSizePixel=0, ZIndex=60, Visible=false
 }, gui)
--- estilo duro: esquinas rectas + doble trazo + glow
-mk("UIStroke",{Thickness=2.0, Transparency=0.25, Color=Color3.fromRGB(80,140,255)}, loginFrame)
-local glow = mk("Frame",{Size=UDim2.new(1,-20,0,4), Position=UDim2.new(0,10,0,44), BackgroundColor3=Color3.fromRGB(120,70,220), ZIndex=61}, loginFrame)
-mk("UIGradient",{Color=ColorSequence.new(Color3.fromRGB(80,160,255), Color3.fromRGB(200,110,255))}, glow)
+-- Estilo duro: bordes rectos + marco doble y esquinas-luz
+mk("UIStroke",{Thickness=2.5, Transparency=0.2, Color=Color3.fromRGB(100,160,255)}, login)
+local frameTop = mk("Frame",{Size=UDim2.new(1,-20,0,4), Position=UDim2.new(0,10,0,44),
+    BackgroundColor3=Color3.fromRGB(180,80,240), ZIndex=61}, login)
+mk("UIGradient",{Color=ColorSequence.new(Color3.fromRGB(80,160,255), Color3.fromRGB(200,110,255))}, frameTop)
 
--- aparición con scale/alpha
-local scl = mk("UIScale",{Scale=0.9}, loginFrame)
-TS:Create(scl, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Scale=1}):Play()
-
-local title = mk("TextLabel",{
-    BackgroundTransparency=1, Font=Enum.Font.GothamBlack, TextSize=16,
-    TextColor3=Color3.fromRGB(230,230,255), Text="Foxxy's Leaks — Login (estilo duro)",
-    Size=UDim2.new(1,-20,0,32), Position=UDim2.new(0,10,0,10), ZIndex=61, TextXAlignment=Enum.TextXAlignment.Left
-}, loginFrame)
-
-local keyBox = mk("TextBox",{
-    Size=UDim2.new(1,-20,0,38), Position=UDim2.new(0,10,0,74),
-    BackgroundColor3=Color3.fromRGB(26,26,36), TextColor3=Color3.new(1,1,1),
-    PlaceholderText="Ingresa la key", ClearTextOnFocus=false,
-    Font=Enum.Font.Gotham, TextSize=14, ZIndex=61, TextScaled=false
-}, loginFrame)
+local titleL = mk("TextLabel",{BackgroundTransparency=1, Size=UDim2.new(1,-20,0,32), Position=UDim2.new(0,10,0,10),
+    Font=Enum.Font.GothamBlack, TextSize=16, TextColor3=Color3.fromRGB(230,230,255), Text=TITLE.." — Login (hard)"}, login)
+local keyBox = mk("TextBox",{Size=UDim2.new(1,-20,0,38), Position=UDim2.new(0,10,0,74),
+    BackgroundColor3=Color3.fromRGB(24,24,34), TextColor3=Color3.new(1,1,1), PlaceholderText="Ingresa la key",
+    ClearTextOnFocus=false, Font=Enum.Font.Gotham, TextSize=14, ZIndex=61}, login)
 mk("UIStroke",{Thickness=1.6, Transparency=0.35, Color=Color3.fromRGB(70,120,220)}, keyBox)
+local btnEnter = mk("TextButton",{Size=UDim2.new(1,-20,0,38), Position=UDim2.new(0,10,0,122),
+    BackgroundColor3=Color3.fromRGB(45,130,90), TextColor3=Color3.new(1,1,1), Font=Enum.Font.GothamBold, TextSize=14, Text="Entrar", ZIndex=61}, login)
+mk("UIStroke",{Thickness=1.8, Transparency=0.25, Color=Color3.fromRGB(60,130,100)}, btnEnter)
+styleButton(btnEnter)
+local infoL = mk("TextLabel",{BackgroundTransparency=1, Size=UDim2.new(1,-20,0,16), Position=UDim2.new(0,10,1,-22),
+    Font=Enum.Font.Gotham, TextSize=12, TextColor3=Color3.fromRGB(180,180,200), Text="Key requerida para continuar", ZIndex=61}, login)
 
-local loginBtn = mk("TextButton",{
-    Size=UDim2.new(1,-20,0,38), Position=UDim2.new(0,10,0,122),
-    BackgroundColor3=Color3.fromRGB(45,130,90), TextColor3=Color3.new(1,1,1),
-    Font=Enum.Font.GothamBold, TextSize=14, Text="Entrar", ZIndex=61
-}, loginFrame)
-mk("UIStroke",{Thickness=1.8, Transparency=0.25, Color=Color3.fromRGB(60,130,100)}, loginBtn)
-
-local info = mk("TextLabel",{
-    BackgroundTransparency=1, TextColor3=Color3.fromRGB(180,180,200),
-    Font=Enum.Font.Gotham, TextSize=12,
-    Text="Key requerida para continuar", Size=UDim2.new(1,-20,0,16),
-    Position=UDim2.new(0,10,1,-22), ZIndex=61, TextXAlignment=Enum.TextXAlignment.Left
-}, loginFrame)
-
-local function toast(txt, dur)
-    pcall(function()
-        SG:SetCore("SendNotification", {Title="Foxxy's Leaks", Text=txt, Duration=dur or 5})
-    end)
-end
-
--- Banner clicable (9s)
-local function clickableBanner(message, link, duration)
-    duration = duration or 9
+local function clickableBanner(msg, link, dur)
     local banner = mk("TextButton",{
-        AutoButtonColor=true, Text = message.."  (clic para copiar)",
+        AutoButtonColor=true, Text = msg.."  (clic para copiar)",
         Font=Enum.Font.GothamSemibold, TextSize=14, TextXAlignment=Enum.TextXAlignment.Left,
         TextColor3=Color3.fromRGB(235,235,255), Size=UDim2.new(1,-20,0,36),
-        Position=UDim2.new(0,10,0,-40), BackgroundColor3=Color3.fromRGB(28,28,40),
-        BorderSizePixel=0, ZIndex=100
+        Position=UDim2.new(0,10,0,10), BackgroundColor3=Color3.fromRGB(28,28,40),
+        BorderSizePixel=0, ZIndex=100, Visible=false
     }, gui)
     mk("UIStroke",{Thickness=1.2, Transparency=0.4, Color=Color3.fromRGB(70,120,220)}, banner)
-    TS:Create(banner, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position=UDim2.new(0,10,0,10)}):Play()
+    styleButton(banner)
     banner.MouseButton1Click:Connect(function()
         if setclipboard then setclipboard(link) banner.Text = "¡Copiado! "..link end
     end)
-    task.delay(duration, function()
+    banner.Visible = true
+    TS:Create(banner, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position=UDim2.new(0,10,0,10)}):Play()
+    task.delay(dur or 9, function()
         if banner and banner.Parent then
             TS:Create(banner, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Position=UDim2.new(0,10,0,-40)}):Play()
             task.delay(0.22, function() if banner then banner:Destroy() end end)
@@ -245,150 +233,119 @@ local function clickableBanner(message, link, duration)
 end
 
 -------------------------
---  CONTENEDOR PRINC.  --
+--    MENÚ PRINCIPAL   --
 -------------------------
-local main = mk("Frame",{Size=UDim2.fromOffset(780, 0), Position=UDim2.new(0.5,-390, 0.18,0),
-    BackgroundColor3=Color3.fromRGB(10,10,16), BorderSizePixel=0, Visible=false, ZIndex=5}, gui)
-mk("UIStroke",{Thickness=2.2, Transparency=0.25, Color=Color3.fromRGB(80,140,255)}, main)
+local main = mk("Frame",{Size=UDim2.fromOffset(820, 0), Position=UDim2.new(0.5,-410, 0.16,0),
+    BackgroundColor3=Color3.fromRGB(8,8,14), BorderSizePixel=0, Visible=false, ZIndex=5}, gui)
+mk("UIStroke",{Thickness=2.4, Transparency=0.25, Color=Color3.fromRGB(90,150,255)}, main)
 
--- Sidebar (tabs)
-local sidebar = mk("Frame",{Size=UDim2.fromOffset(170, 460), Position=UDim2.new(0,0,0,0), BackgroundColor3=Color3.fromRGB(14,14,22), BorderSizePixel=0, ZIndex=6}, main)
+-- DRAG (mover)
+do
+    local dragging, startPos, delta
+    main.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true; startPos = inp.Position; delta = startPos - main.AbsolutePosition
+        end
+    end)
+    UIS.InputChanged:Connect(function(inp)
+        if dragging and inp.UserInputType == Enum.UserInputType.MouseMovement then
+            local p = inp.Position - delta
+            main.Position = UDim2.fromOffset(p.X, p.Y)
+        end
+    end)
+    UIS.InputEnded:Connect(function(inp) if inp.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end end)
+end
+
+-- Sidebar tabs
+local sidebar = mk("Frame",{Size=UDim2.fromOffset(180, 520), BackgroundColor3=Color3.fromRGB(14,14,22), BorderSizePixel=0, ZIndex=6}, main)
 mk("UIStroke",{Thickness=2, Transparency=0.3, Color=Color3.fromRGB(60,80,130)}, sidebar)
+local function makeTab(name, y)
+    local b = mk("TextButton",{Size=UDim2.fromOffset(160,36), Position=UDim2.new(0,10,0,y),
+        BackgroundColor3=Color3.fromRGB(28,28,40), BorderSizePixel=0, Font=Enum.Font.GothamBold, TextSize=14,
+        TextColor3=Color3.new(1,1,1), Text=name, ZIndex=7}, sidebar)
+    mk("UIStroke",{Thickness=1.8, Transparency=0.4, Color=Color3.fromRGB(70,70,110)}, b)
+    styleButton(b)
+    return b
+end
 
--- TopBar
-local topBar = mk("Frame",{Size=UDim2.new(1,0,0,54), Position=UDim2.new(0,0,0,0),
-    BackgroundColor3=Color3.fromRGB(16,16,26), BorderSizePixel=0, ZIndex=7}, main)
-local logo = mk("ImageLabel",{BackgroundTransparency=1, Size=UDim2.fromOffset(36,36), Position=UDim2.new(0,10,0.5,-18), ZIndex=8}, topBar)
-pcall(function() logo.Image=LOGO_URL end)
-local titleMain = mk("TextLabel",{BackgroundTransparency=1, Size=UDim2.new(1,-60,1,0), Position=UDim2.new(0,56,0,0),
-    Font=Enum.Font.GothamBlack, TextSize=16, TextColor3=Color3.fromRGB(220,220,255),
-    Text="Foxxy's Leaks — [L para ocultar/mostrar]", ZIndex=8, TextXAlignment=Enum.TextXAlignment.Left}, topBar)
-
--- Pie con usuario
-local footer = mk("TextLabel",{BackgroundTransparency=1, Size=UDim2.new(1,-16,0,20), Position=UDim2.new(0,8,1,-22),
-    Font=Enum.Font.Gotham, TextSize=12, TextColor3=Color3.fromRGB(160,160,190),
-    Text="programador: by pedri.exe  |  Usuario: (cargando...)", ZIndex=7, TextXAlignment=Enum.TextXAlignment.Center}, main)
-task.defer(function()
-    footer.Text = string.format("programador: by pedri.exe  |  Usuario: %s (@%s)", lp.DisplayName, lp.Name)
-end)
-
--- Área de páginas (derecha)
-local pages = mk("Frame",{Size=UDim2.fromOffset(780-170, 460), Position=UDim2.new(0,170,0,0), BackgroundTransparency=1, ZIndex=6}, main)
+local pages = mk("Frame",{Size=UDim2.fromOffset(820-180, 520), Position=UDim2.new(0,180,0,0),
+    BackgroundTransparency=1, ZIndex=6}, main)
 local pageMove  = mk("Frame",{Size=UDim2.fromScale(1,1), BackgroundTransparency=1, ZIndex=6}, pages)
 local pageAimb  = mk("Frame",{Size=UDim2.fromScale(1,1), BackgroundTransparency=1, Visible=false, ZIndex=6}, pages)
 local pageVisual= mk("Frame",{Size=UDim2.fromScale(1,1), BackgroundTransparency=1, Visible=false, ZIndex=6}, pages)
 local pageOtros = mk("Frame",{Size=UDim2.fromScale(1,1), BackgroundTransparency=1, Visible=false, ZIndex=6}, pages)
 local pageCred  = mk("Frame",{Size=UDim2.fromScale(1,1), BackgroundTransparency=1, Visible=false, ZIndex=6}, pages)
 
--- Botones de sidebar
-local function makeTab(name, y, targetPage)
-    local b = mk("TextButton",{
-        Size=UDim2.fromOffset(150,34), Position=UDim2.new(0,10,0,y),
-        BackgroundColor3=Color3.fromRGB(28,28,40), BorderSizePixel=0,
-        Font=Enum.Font.GothamBold, TextSize=14, TextColor3=Color3.new(1,1,1), Text=name, ZIndex=7
-    }, sidebar)
-    mk("UIStroke",{Thickness=1.8, Transparency=0.4, Color=Color3.fromRGB(70,70,110)}, b)
-    b.MouseButton1Click:Connect(function()
-        pageMove.Visible=false; pageAimb.Visible=false; pageVisual.Visible=false; pageOtros.Visible=false; pageCred.Visible=false
-        targetPage.Visible=true
-    end)
-    return b
+local function switchPage(which)
+    pageMove.Visible=false; pageAimb.Visible=false; pageVisual.Visible=false; pageOtros.Visible=false; pageCred.Visible=false
+    which.Visible=true
 end
-makeTab("Movimiento", 16, pageMove)
-makeTab("Aimbot",     56, pageAimb)
-makeTab("Visual",     96, pageVisual)
-makeTab("Otros",     136, pageOtros)
-makeTab("Créditos",  176, pageCred)
 
--- Fondo estrella simple (líneas duras)
-local starLayer = mk("Frame",{BackgroundTransparency=1, Size=UDim2.fromScale(1,1), ZIndex=5}, main)
-local function spawnStars(container, count)
-    task.wait()
-    local w,h = container.AbsoluteSize.X, container.AbsoluteSize.Y
-    for _=1,count do
-        local s = mk("Frame",{Size=UDim2.fromOffset(2,2), Position=UDim2.fromOffset(math.random(0,w), math.random(0,h)),
-            BackgroundColor3=Color3.fromRGB(255,255,255), BorderSizePixel=0, ZIndex=4}, container)
-        task.spawn(function()
-            while s.Parent do
-                local dur = 5 + math.random()
-                TS:Create(s, TweenInfo.new(dur, Enum.EasingStyle.Linear), {Position=UDim2.fromOffset(s.Position.X.Offset, h+6)}):Play()
-                task.wait(dur)
-                s.Position = UDim2.fromOffset(math.random(0,w), -6)
-            end
-        end)
-    end
-end
-spawnStars(starLayer, 70)
+local tbMove   = makeTab("Movimiento", 16);   tbMove.MouseButton1Click:Connect(function() switchPage(pageMove) end)
+local tbAimb   = makeTab("Aimbot",     56);   tbAimb.MouseButton1Click:Connect(function() switchPage(pageAimb) end)
+local tbVisual = makeTab("Visual",     96);   tbVisual.MouseButton1Click:Connect(function() switchPage(pageVisual) end)
+local tbOtros  = makeTab("Otros",     136);   tbOtros.MouseButton1Click:Connect(function() switchPage(pageOtros) end)
+local tbCred   = makeTab("Créditos",  176);   tbCred.MouseButton1Click:Connect(function() switchPage(pageCred) end)
+
+-- Header + footer
+local header = mk("TextLabel",{BackgroundTransparency=1, Size=UDim2.new(1,0,0,32), Position=UDim2.new(0,10,0,10),
+    Font=Enum.Font.GothamBlack, TextSize=16, TextColor3=Color3.fromRGB(220,220,255), Text = TITLE.."  —  [L para ocultar/mostrar]"}, pages)
+local footer = mk("TextLabel",{BackgroundTransparency=1, Size=UDim2.new(1,-16,0,20), Position=UDim2.new(0,8,1,-24),
+    Font=Enum.Font.Gotham, TextSize=12, TextColor3=Color3.fromRGB(160,160,190),
+    Text="programador: by pedri.exe  |  Usuario: (cargando...)",
+    ZIndex=7, TextXAlignment=Enum.TextXAlignment.Center}, pages)
+task.defer(function()
+    footer.Text = string.format("programador: by pedri.exe  |  Usuario: %s (@%s)", lp.DisplayName, lp.Name)
+end)
 
 -------------------------
---  MOVIMIENTO (DURO)  --
+--   MOVIMIENTO (UI)   --
 -------------------------
-local currentSpeed = SPEED_DEFAULT
+local currentSpeed, flySpeed = SPEED_DEFAULT, FLY_SPEED_DEFAULT
 local jumpMult = JUMP_MULT_DEFAULT
-local flySpeed = FLY_SPEED_DEFAULT
 
-local speedLabel = mk("TextLabel",{BackgroundTransparency=1, Text="Velocidad: "..SPEED_DEFAULT, TextColor3=Color3.fromRGB(235,235,255),
-    Font=Enum.Font.Gotham, TextSize=14, Size=UDim2.new(1,-24,0,18), Position=UDim2.new(0,12,0,8)}, pageMove)
-local speedSlider = makeHardSlider(pageMove, 30, SPEED_MIN, SPEED_MAX, SPEED_DEFAULT, Color3.fromRGB(80,180,120), function(v)
-    currentSpeed = math.floor(v+0.5)
-    speedLabel.Text = "Velocidad: "..currentSpeed
+local speedS = hardSlider(pageMove, 36, SPEED_MIN, SPEED_MAX, SPEED_DEFAULT, Color3.fromRGB(80,180,120), function(v, lab)
+    currentSpeed = math.floor(v+0.5); lab.Text = "Velocidad: "..currentSpeed
     local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid"); if hum then hum.WalkSpeed = currentSpeed end
-end)
+end); speedS.setLabel("Velocidad: "..SPEED_DEFAULT)
 
-local jumpLabel = mk("TextLabel",{BackgroundTransparency=1, Text=string.format("Salto: x%.2f", JUMP_MULT_DEFAULT), TextColor3=Color3.fromRGB(235,235,255),
-    Font=Enum.Font.Gotham, TextSize=14, Size=UDim2.new(1,-24,0,18), Position=UDim2.new(0,12,0,84)}, pageMove)
-local baseRecorded, baseUseJumpPower, baseJumpPower, baseJumpHeight = false,false,0,0
-local function recordBaseJump(hum)
-    if baseRecorded then return end
-    baseUseJumpPower = hum.UseJumpPower
-    if baseUseJumpPower then baseJumpPower = hum.JumpPower else baseJumpHeight = hum.JumpHeight end
-    baseRecorded = true
-end
-local function applyJump(hum)
-    if not hum then return end
-    recordBaseJump(hum)
-    if baseUseJumpPower then
-        local target = math.min(baseJumpPower + JUMP_MAX_ABS_ADD, baseJumpPower * jumpMult)
-        hum.JumpPower = target
-    else
-        local target = math.min(baseJumpHeight + (JUMP_MAX_ABS_ADD/8), baseJumpHeight * jumpMult)
-        hum.JumpHeight = target
+local jumpS = hardSlider(pageMove, 96, JUMP_MULT_MIN, JUMP_MULT_MAX, JUMP_MULT_DEFAULT, Color3.fromRGB(120,150,230), function(v, lab)
+    jumpMult = v; lab.Text = ("Salto: x%.2f"):format(jumpMult)
+    local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")
+    if hum then
+        local useJP, baseJP, baseJH = hum.UseJumpPower, hum.JumpPower, hum.JumpHeight
+        if useJP then
+            hum.JumpPower = math.min(baseJP + JUMP_MAX_ABS_ADD, baseJP * jumpMult)
+        else
+            hum.JumpHeight = math.min(baseJH + (JUMP_MAX_ABS_ADD/8), baseJH * jumpMult)
+        end
     end
-    jumpLabel.Text = string.format("Salto: x%.2f", jumpMult)
-end
-local jumpSlider = makeHardSlider(pageMove, 106, JUMP_MULT_MIN, JUMP_MULT_MAX, JUMP_MULT_DEFAULT, Color3.fromRGB(120,150,230), function(v)
-    jumpMult = v
-    local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid"); if hum then applyJump(hum) end
-end)
+end); jumpS.setLabel(("Salto: x%.2f"):format(JUMP_MULT_DEFAULT))
 
-local flyLabel = mk("TextLabel",{BackgroundTransparency=1, Text="Velocidad de vuelo: "..FLY_SPEED_DEFAULT, TextColor3=Color3.fromRGB(235,235,255),
-    Font=Enum.Font.Gotham, TextSize=14, Size=UDim2.new(1,-24,0,18), Position=UDim2.new(0,12,0,162)}, pageMove)
-local flySlider = makeHardSlider(pageMove, 184, FLY_SPEED_MIN, FLY_SPEED_MAX, FLY_SPEED_DEFAULT, Color3.fromRGB(210,150,100), function(v)
-    flySpeed = math.floor(v+0.5)
-    flyLabel.Text = "Velocidad de vuelo: "..flySpeed
-end)
+local flyS = hardSlider(pageMove, 156, FLY_SPEED_MIN, FLY_SPEED_MAX, FLY_SPEED_DEFAULT, Color3.fromRGB(210,150,100), function(v, lab)
+    flySpeed = math.floor(v+0.5); lab.Text = "Velocidad de vuelo: "..flySpeed
+end); flyS.setLabel("Velocidad de vuelo: "..FLY_SPEED_DEFAULT)
 
--- Toggles Noclip + Fly
 local function getHum()
     local c = lp.Character
     return c and c:FindFirstChildOfClass("Humanoid"), c and c:FindFirstChild("HumanoidRootPart")
 end
 
+-- Noclip
 local noclipOn=false
 local hbConn, steppedConn
-local originalCollide = {}
-local btnNoclip = makeToggle(pageMove, "Atravesar paredes: OFF", 230, function(b)
+local origCollide = {}
+local btnNoclip = mk("TextButton",{Size=UDim2.new(1,-24,0,34), Position=UDim2.new(0,12,0,210),
+    BackgroundColor3=Color3.fromRGB(120,50,50), BorderSizePixel=0, Font=Enum.Font.GothamBold, TextSize=14, Text="Atravesar paredes: OFF", TextColor3=Color3.new(1,1,1)}, pageMove)
+mk("UIStroke",{Thickness=1.8, Transparency=0.4, Color=Color3.fromRGB(70,70,110)}, btnNoclip); styleButton(btnNoclip)
+btnNoclip.MouseButton1Click:Connect(function()
     noclipOn = not noclipOn
-    setBtnState(b, "Atravesar paredes: ", noclipOn)
+    setToggle(btnNoclip, "Atravesar paredes: ", noclipOn)
     local function cacheDefaults(char)
-        for _, p in ipairs(char:GetDescendants()) do
-            if p:IsA("BasePart") and originalCollide[p]==nil then originalCollide[p]=p.CanCollide end
-        end
+        for _,p in ipairs(char:GetDescendants()) do if p:IsA("BasePart") and origCollide[p]==nil then origCollide[p]=p.CanCollide end end
     end
     local function setCharCollision(char, can)
-        for _, p in ipairs(char:GetDescendants()) do
-            if p:IsA("BasePart") then p.CanCollide = can; p.CanTouch = not can end
-        end
+        for _,p in ipairs(char:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = can; p.CanTouch = not can end end
     end
     if noclipOn then
         local char = lp.Character
@@ -397,7 +354,7 @@ local btnNoclip = makeToggle(pageMove, "Atravesar paredes: OFF", 230, function(b
         steppedConn = RS.Stepped:Connect(function()
             if not noclipOn then return end
             local c = lp.Character; if not c then return end
-            for _, p in ipairs(c:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = false end end
+            for _, p in ipairs(c:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide=false end end
         end)
         if hbConn then hbConn:Disconnect() end
         hbConn = RS.Heartbeat:Connect(function(dt)
@@ -414,20 +371,23 @@ local btnNoclip = makeToggle(pageMove, "Atravesar paredes: OFF", 230, function(b
         if steppedConn then steppedConn:Disconnect(); steppedConn=nil end
         local char = lp.Character
         if char then
-            for _, p in ipairs(char:GetDescendants()) do
-                if p:IsA("BasePart") and originalCollide[p]~=nil then p.CanCollide=originalCollide[p]; p.CanTouch=true end
+            for _,p in ipairs(char:GetDescendants()) do
+                if p:IsA("BasePart") and origCollide[p]~=nil then p.CanCollide = origCollide[p]; p.CanTouch=true end
             end
         end
     end
 end)
-setBtnState(btnNoclip, "Atravesar paredes: ", noclipOn)
 
+-- Fly
 local flyOn=false
 local flyBV, flyBGyro, flyConn
-local btnFly = makeToggle(pageMove, "Fly: OFF", 270, function(b)
+local btnFly = mk("TextButton",{Size=UDim2.new(1,-24,0,34), Position=UDim2.new(0,12,0,250),
+    BackgroundColor3=Color3.fromRGB(120,50,50), BorderSizePixel=0, Font=Enum.Font.GothamBold, TextSize=14, Text="Fly: OFF", TextColor3=Color3.new(1,1,1)}, pageMove)
+mk("UIStroke",{Thickness=1.8, Transparency=0.4, Color=Color3.fromRGB(70,70,110)}, btnFly); styleButton(btnFly)
+btnFly.MouseButton1Click:Connect(function()
     local function enableFly()
         if flyOn then return end
-        flyOn = true; setBtnState(b, "Fly: ", true)
+        flyOn = true; setToggle(btnFly, "Fly: ", true)
         local hum, hrp = getHum(); if not (hum and hrp) then return end
         hum.PlatformStand = true
         flyBV = mk("BodyVelocity",{MaxForce=Vector3.new(1e5,1e5,1e5), Velocity=Vector3.zero}, hrp)
@@ -447,15 +407,18 @@ local btnFly = makeToggle(pageMove, "Fly: OFF", 270, function(b)
             if UIS:IsKeyDown(Enum.KeyCode.Space) then up=1 end
             if UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl) then up=-1 end
             flyBV.Velocity = Vector3.new(dir.X*flySpeed, up*flySpeed, dir.Z*flySpeed)
-            local hrpPos = hrp.Position
-            local targetCF = CFrame.lookAt(hrpPos, hrpPos + flatLook)
-            hrp.CFrame = hrp.CFrame:Lerp(targetCF, math.clamp(FLY_TILT_STIFFNESS*dt,0,1))
-            flyBGyro.CFrame = cam.CFrame
+            local hrp2 = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+            if hrp2 then
+                local hrpPos = hrp2.Position
+                local targetCF = CFrame.lookAt(hrpPos, hrpPos + flatLook)
+                hrp2.CFrame = hrp2.CFrame:Lerp(targetCF, math.clamp(FLY_TILT_STIFFNESS*dt,0,1))
+                flyBGyro.CFrame = cam.CFrame
+            end
         end)
     end
     local function disableFly()
         if not flyOn then return end
-        flyOn=false; setBtnState(b, "Fly: ", false)
+        flyOn=false; setToggle(btnFly, "Fly: ", false)
         local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")
         if hum then hum.PlatformStand=false end
         if flyConn then flyConn:Disconnect(); flyConn=nil end
@@ -464,243 +427,291 @@ local btnFly = makeToggle(pageMove, "Fly: OFF", 270, function(b)
     end
     if flyOn then disableFly() else enableFly() end
 end)
-setBtnState(btnFly, "Fly: ", flyOn)
 
 lp.CharacterAdded:Connect(function(char)
-    originalCollide = {}
+    origCollide = {}
     local hum = char:WaitForChild("Humanoid",10); char:WaitForChild("HumanoidRootPart",10)
-    if hum then
-        hum.WalkSpeed = currentSpeed
-        baseRecorded=false; recordBaseJump(hum); applyJump(hum)
-        if flyOn then task.wait(0.2); btnFly:Activate() end
-    end
+    if hum then hum.WalkSpeed = currentSpeed end
+    if flyOn then task.wait(0.2); btnFly:Activate() end
     if noclipOn then task.wait(0.1)
-        for _, p in ipairs(char:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide=false end end
+        for _,p in ipairs(char:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = false end end
     end
 end)
 
 -------------------------
---       AIMBOT        --
+--      AIMBOT (UI)    --
 -------------------------
 local aimbotOn=false
 local aimFOV = AIM_FOV_DEFAULT
+local aimCircleOn = true
 local aimColor = Color3.fromRGB(255,70,70)
-local aimSmooth = AIM_SMOOTH_DEFAULT
+local aimIntensity = AIM_INT_DEFAULT -- 1..100
 
--- Tecla configurable (por defecto MouseButton2 / clic derecho)
+-- Keybind
 local aimKey_IsMouse = true
 local aimKey_Mouse   = Enum.UserInputType.MouseButton2
 local aimKey_KeyCode = nil
-
 local function aimKeyToText()
     if aimKey_IsMouse then
         if aimKey_Mouse == Enum.UserInputType.MouseButton2 then return "RMB (clic derecho)" end
         if aimKey_Mouse == Enum.UserInputType.MouseButton1 then return "LMB (clic izq.)" end
         if aimKey_Mouse == Enum.UserInputType.MouseButton3 then return "MMB (clic medio)" end
-        return tostring(aimKey_Mouse.Name)
+        return aimKey_Mouse.Name
     else
         return aimKey_KeyCode and aimKey_KeyCode.Name or "N/A"
     end
 end
 
--- Círculo de FOV
+-- FOV circle
 local fovCircle = mk("Frame",{AnchorPoint=Vector2.new(0.5,0.5), Size=UDim2.fromOffset(aimFOV*2, aimFOV*2),
-    Position=UDim2.fromScale(0.5,0.5), BackgroundTransparency=1, Visible=false, ZIndex=999}, gui)
+    Position=UDim2.fromScale(0.5,0.5), BackgroundTransparency=1, Visible=aimCircleOn, ZIndex=999}, gui)
 mk("UICorner",{CornerRadius=UDim.new(1,0)}, fovCircle)
 local fovStroke = mk("UIStroke",{Thickness=2, Transparency=0.15, Color=aimColor}, fovCircle)
+local function setFOV(v) aimFOV = math.clamp(math.floor(v+0.5), AIM_FOV_MIN, AIM_FOV_MAX); fovCircle.Size = UDim2.fromOffset(aimFOV*2, aimFOV*2) end
+local function setAimColor(c) aimColor=c; fovStroke.Color=c end
 
-local function setFOV(v)
-    aimFOV = math.clamp(math.floor(v+0.5), AIM_FOV_MIN, AIM_FOV_MAX)
-    fovCircle.Size = UDim2.fromOffset(aimFOV*2, aimFOV*2)
-end
-local function setAimColor(c)
-    aimColor = c; fovStroke.Color = c
-end
+-- Controles
+local btnAimb = mk("TextButton",{Size=UDim2.new(1,-24,0,34), Position=UDim2.new(0,12,0,10),
+    BackgroundColor3=Color3.fromRGB(120,50,50), BorderSizePixel=0, Font=Enum.Font.GothamBold, TextSize=14, Text="Aimbot: OFF", TextColor3=Color3.new(1,1,1)}, pageAimb)
+mk("UIStroke",{Thickness=1.8, Transparency=0.4, Color=Color3.fromRGB(70,70,110)}, btnAimb); styleButton(btnAimb)
+btnAimb.MouseButton1Click:Connect(function() aimbotOn = not aimbotOn; setToggle(btnAimb, "Aimbot: ", aimbotOn); fovCircle.Visible = aimbotOn and aimCircleOn end)
 
--- Controles UI
-local btnAimb = makeToggle(pageAimb, "Aimbot: OFF (mantén tecla)", 10, function(b)
-    aimbotOn = not aimbotOn
-    setBtnState(b, "Aimbot: ", aimbotOn)
-    fovCircle.Visible = aimbotOn
-end); setBtnState(btnAimb, "Aimbot: ", aimbotOn)
-
-local fovLabel = mk("TextLabel",{BackgroundTransparency=1, Text="FOV: "..AIM_FOV_DEFAULT, TextColor3=Color3.fromRGB(235,235,255),
-    Font=Enum.Font.Gotham, TextSize=14, Size=UDim2.new(1,-24,0,18), Position=UDim2.new(0,12,0,52)}, pageAimb)
-local fovSlider = makeHardSlider(pageAimb, 74, AIM_FOV_MIN, AIM_FOV_MAX, AIM_FOV_DEFAULT, Color3.fromRGB(200,120,120), function(v)
-    setFOV(v); fovLabel.Text = "FOV: "..aimFOV
-end)
-
--- Smooth
-local smoothLabel = mk("TextLabel",{BackgroundTransparency=1, Text=("Suavizado: %.2f"):format(AIM_SMOOTH_DEFAULT), TextColor3=Color3.fromRGB(235,235,255),
-    Font=Enum.Font.Gotham, TextSize=14, Size=UDim2.new(1,-24,0,18), Position=UDim2.new(0,12,0,118)}, pageAimb)
-local smoothSlider = makeHardSlider(pageAimb, 140, AIM_SMOOTH_MIN, AIM_SMOOTH_MAX, AIM_SMOOTH_DEFAULT, Color3.fromRGB(120,200,160), function(v)
-    aimSmooth = math.clamp(v, AIM_SMOOTH_MIN, AIM_SMOOTH_MAX)
-    smoothLabel.Text = ("Suavizado: %.2f"):format(aimSmooth)
-end)
-
--- Color RGB
-local rgbTitle = mk("TextLabel",{BackgroundTransparency=1, Text="Color FOV (R/G/B)", TextColor3=Color3.fromRGB(240,240,255),
-    Font=Enum.Font.Gotham, TextSize=12, Size=UDim2.new(1,-24,0,16), Position=UDim2.new(0,12,0,178)}, pageAimb)
-local R,G,B = 255,70,70
-local rSl = makeHardSlider(pageAimb, 198, 0,255, R, Color3.fromRGB(255,100,100), function(v) R=math.floor(v+0.5); setAimColor(Color3.fromRGB(R,G,B)) end)
-local gSl = makeHardSlider(pageAimb, 226, 0,255, G, Color3.fromRGB(100,255,100), function(v) G=math.floor(v+0.5); setAimColor(Color3.fromRGB(R,G,B)) end)
-local bSl = makeHardSlider(pageAimb, 254, 0,255, B, Color3.fromRGB(100,100,255), function(v) B=math.floor(v+0.5); setAimColor(Color3.fromRGB(R,G,B)) end)
-local preview = mk("Frame",{Size=UDim2.fromOffset(28,28), Position=UDim2.new(1,-40,0,198), BackgroundColor3=aimColor, ZIndex=6}, pageAimb)
-mk("UIStroke",{Thickness=1.2, Transparency=0.4, Color=Color3.fromRGB(120,120,160)}, preview)
-task.spawn(function()
-    while preview.Parent do preview.BackgroundColor3 = aimColor; task.wait(0.1) end
-end)
-
--- Rebind de tecla
-local waitingBind = false
-local keyLabel = mk("TextLabel",{BackgroundTransparency=1, Text="Tecla actual: "..aimKeyToText(), TextColor3=Color3.fromRGB(235,235,255),
-    Font=Enum.Font.Gotham, TextSize=14, Size=UDim2.new(1,-24,0,18), Position=UDim2.new(0,12,0,294)}, pageAimb)
-local bindBtn = makeToggle(pageAimb, "Cambiar tecla aimbot", 316, function(b)
+local btnBind = mk("TextButton",{Size=UDim2.new(1,-24,0,34), Position=UDim2.new(0,12,0,50),
+    BackgroundColor3=Color3.fromRGB(28,28,40), BorderSizePixel=0, Font=Enum.Font.GothamBold, TextSize=14, Text="Cambiar tecla ("..aimKeyToText()..")", TextColor3=Color3.new(1,1,1)}, pageAimb)
+mk("UIStroke",{Thickness=1.8, Transparency=0.4, Color=Color3.fromRGB(70,70,110)}, btnBind); styleButton(btnBind)
+local waitingBind=false
+btnBind.MouseButton1Click:Connect(function()
     waitingBind = true
-    b.Text = "Pulsa una tecla o botón..."
-    b.BackgroundColor3 = Color3.fromRGB(80,80,140)
+    btnBind.Text = "Pulsa una tecla o botón…"
+    btnBind.BackgroundColor3 = Color3.fromRGB(80,80,140)
 end)
-
 UIS.InputBegan:Connect(function(inp, gpe)
     if waitingBind then
-        waitingBind = false
-        -- Preferimos teclas o botones del mouse
-        if inp.UserInputType == Enum.UserInputType.MouseButton1
-            or inp.UserInputType == Enum.UserInputType.MouseButton2
-            or inp.UserInputType == Enum.UserInputType.MouseButton3 then
-            aimKey_IsMouse = true
-            aimKey_Mouse   = inp.UserInputType
-            aimKey_KeyCode = nil
+        waitingBind=false
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.MouseButton2 or inp.UserInputType == Enum.UserInputType.MouseButton3 then
+            aimKey_IsMouse=true; aimKey_Mouse=inp.UserInputType; aimKey_KeyCode=nil
         elseif inp.KeyCode ~= Enum.KeyCode.Unknown then
-            aimKey_IsMouse = false
-            aimKey_KeyCode = inp.KeyCode
+            aimKey_IsMouse=false; aimKey_KeyCode=inp.KeyCode
         end
-        keyLabel.Text = "Tecla actual: "..aimKeyToText()
-        bindBtn.Text = "Cambiar tecla aimbot"
-        setBtnState(bindBtn, "Cambiar tecla aimbot ", false) -- solo para restablecer color
-        bindBtn.BackgroundColor3 = Color3.fromRGB(28,28,40)
+        btnBind.Text = "Cambiar tecla ("..aimKeyToText()..")"
+        btnBind.BackgroundColor3 = Color3.fromRGB(28,28,40)
     end
 end)
 
--- Targeting
-local aimHeld = false
-UIS.InputBegan:Connect(function(inp, gpe)
-    if gpe then return end
-    if aimKey_IsMouse and inp.UserInputType == aimKey_Mouse then aimHeld = true end
-    if (not aimKey_IsMouse) and inp.KeyCode == (aimKey_KeyCode or Enum.KeyCode.Unknown) then aimHeld = true end
+-- Intensidad 1..100
+local intS = hardSlider(pageAimb, 96, AIM_INT_MIN, AIM_INT_MAX, AIM_INT_DEFAULT, Color3.fromRGB(120,200,160), function(v, lab)
+    aimIntensity = math.floor(v+0.5)
+    lab.Text = "Intensidad: "..aimIntensity.."/100"
+end); intS.setLabel("Intensidad: "..AIM_INT_DEFAULT.."/100")
+
+-- FOV ON/OFF
+local btnFOV = mk("TextButton",{Size=UDim2.new(1,-24,0,34), Position=UDim2.new(0,12,0,136),
+    BackgroundColor3=Color3.fromRGB(45,130,90), BorderSizePixel=0, Font=Enum.Font.GothamBold, TextSize=14, Text="FOV círculo: ON", TextColor3=Color3.new(1,1,1)}, pageAimb)
+mk("UIStroke",{Thickness=1.8, Transparency=0.4, Color=Color3.fromRGB(70,70,110)}, btnFOV); styleButton(btnFOV)
+btnFOV.MouseButton1Click:Connect(function()
+    aimCircleOn = not aimCircleOn
+    btnFOV.Text = "FOV círculo: " .. (aimCircleOn and "ON" or "OFF")
+    btnFOV.BackgroundColor3 = aimCircleOn and Color3.fromRGB(45,130,90) or Color3.fromRGB(120,50,50)
+    fovCircle.Visible = aimbotOn and aimCircleOn
 end)
-UIS.InputEnded:Connect(function(inp, gpe)
-    if aimKey_IsMouse and inp.UserInputType == aimKey_Mouse then aimHeld = false end
-    if (not aimKey_IsMouse) and inp.KeyCode == (aimKey_KeyCode or Enum.KeyCode.Unknown) then aimHeld = false end
+
+-- FOV tamaño
+local fovS = hardSlider(pageAimb, 176, AIM_FOV_MIN, AIM_FOV_MAX, AIM_FOV_DEFAULT, Color3.fromRGB(200,120,120), function(v, lab)
+    setFOV(v); lab.Text = "FOV: "..aimFOV
+end); fovS.setLabel("FOV: "..AIM_FOV_DEFAULT)
+
+-- Color FOV (RGB)
+local rgbTitle = mk("TextLabel",{BackgroundTransparency=1, Size=UDim2.new(1,-24,0,16), Position=UDim2.new(0,12,0,216),
+    Font=Enum.Font.Gotham, TextSize=12, TextColor3=Color3.fromRGB(240,240,255), Text="Color FOV (R/G/B)"}, pageAimb)
+local R,G,B = 255,70,70
+local rSl = hardSlider(pageAimb, 236, 0,255,R, Color3.fromRGB(255,100,100), function(v) R=math.floor(v+0.5); setAimColor(Color3.fromRGB(R,G,B)) end); rSl.setLabel("Rojo")
+local gSl = hardSlider(pageAimb, 264, 0,255,G, Color3.fromRGB(100,255,100), function(v) G=math.floor(v+0.5); setAimColor(Color3.fromRGB(R,G,B)) end); gSl.setLabel("Verde")
+local bSl = hardSlider(pageAimb, 292, 0,255,B, Color3.fromRGB(100,100,255), function(v) B=math.floor(v+0.5); setAimColor(Color3.fromRGB(R,G,B)) end); bSl.setLabel("Azul")
+
+-- Lógica aimbot
+local aimHeld=false
+UIS.InputBegan:Connect(function(inp,gpe)
+    if gpe then return end
+    if aimKey_IsMouse and inp.UserInputType==aimKey_Mouse then aimHeld=true end
+    if (not aimKey_IsMouse) and inp.KeyCode==(aimKey_KeyCode or Enum.KeyCode.Unknown) then aimHeld=true end
+end)
+UIS.InputEnded:Connect(function(inp,gpe)
+    if aimKey_IsMouse and inp.UserInputType==aimKey_Mouse then aimHeld=false end
+    if (not aimKey_IsMouse) and inp.KeyCode==(aimKey_KeyCode or Enum.KeyCode.Unknown) then aimHeld=false end
 end)
 
 local function getTargetHeadInFOV()
     local cam = Workspace.CurrentCamera
     local center = cam.ViewportSize/2
-    local bestPlr, bestDist, bestHead = nil, math.huge, nil
+    local bestHead, bestDist
     for _,p in ipairs(Players:GetPlayers()) do
         if p ~= lp then
-            local char = p.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            local head = char and char:FindFirstChild("Head")
-            if hum and head and hum.Health>0 then
-                local v2, on = cam:WorldToViewportPoint(head.Position)
-                if on and v2.Z>0 then
-                    local dist = (Vector2.new(v2.X, v2.Y) - center).Magnitude
-                    if dist <= aimFOV and dist < bestDist then
-                        bestDist = dist; bestPlr = p; bestHead = head
+            if not (USE_TEAMS_ONLY and Teams and Teams:FindFirstChildOfClass("Team") and lp.Team and p.Team and p.Team==lp.Team) then
+                local char = p.Character
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                local head= char and char:FindFirstChild("Head")
+                if hum and head and hum.Health>0 then
+                    local v2, on = cam:WorldToViewportPoint(head.Position)
+                    if on and v2.Z>0 then
+                        local dist = (Vector2.new(v2.X,v2.Y) - center).Magnitude
+                        if dist <= aimFOV and (not bestDist or dist<bestDist) then
+                            bestDist = dist; bestHead = head
+                        end
                     end
                 end
             end
         end
     end
-    return bestPlr, bestHead
+    return bestHead
 end
 
 RS.RenderStepped:Connect(function(dt)
-    if not aimbotOn or not aimHeld then return end
-    if Workspace.CurrentCamera.CameraType == Enum.CameraType.Scriptable then return end -- no aimbot si Freecam
+    if not (aimbotOn and aimHeld) then return end
+    if Workspace.CurrentCamera.CameraType == Enum.CameraType.Scriptable then return end
     local cam = Workspace.CurrentCamera
-    local _, head = getTargetHeadInFOV()
+    local head = getTargetHeadInFOV()
     if head then
         local from = cam.CFrame.Position
-        local targetCF = CFrame.new(from, head.Position)
-        local t = 1 - (1 - math.clamp(aimSmooth, 0, 0.98))^(math.max(dt*60,1))
-        cam.CFrame = cam.CFrame:Lerp(targetCF, math.clamp(t, 0, 1))
+        local target = CFrame.new(from, head.Position)
+        -- map intensidad 1..100 -> factor de lerp por frame
+        local k = math.clamp(aimIntensity/100, 0.02, 1) -- 0.02 mínimo
+        local t = 1 - (1 - k)^(math.max(dt*60,1))       -- tiempo dependiente del frame
+        cam.CFrame = cam.CFrame:Lerp(target, math.clamp(t,0,1))
     end
 end)
 
 -------------------------
---        VISUAL       --
+--       VISUAL (UI)   --
 -------------------------
-local showNames, showHighlight = false, false
-local nameTags, highlights = {}, {}
-local function attachNameTag(plr)
-    if plr == lp then return end
-    local function onChar(char)
-        local head = char:WaitForChild("Head", 8); if not head then return end
-        if nameTags[plr] and nameTags[plr].Parent then nameTags[plr]:Destroy() end
-        local bb = mk("BillboardGui",{Name="NameTag_DBG", Size=UDim2.fromOffset(200,50), StudsOffset=Vector3.new(0,2.5,0), AlwaysOnTop=true}, head)
-        local tl = mk("TextLabel",{BackgroundTransparency=1, Size=UDim2.new(1,0,1,0), Font=Enum.Font.GothamBold, TextSize=16,
-            TextColor3=Color3.fromRGB(255,255,255), TextStrokeTransparency=0.5, Text=plr.DisplayName.." (@"..plr.Name..")"}, bb)
-        nameTags[plr]=bb; bb.Enabled = showNames
-    end
-    plr.CharacterAdded:Connect(onChar); if plr.Character then onChar(plr.Character) end
-end
-local function attachHighlight(plr)
-    if plr == lp then return end
-    local function onChar(char)
-        if highlights[plr] and highlights[plr].Parent then highlights[plr]:Destroy() end
-        local h = mk("Highlight",{Name="DebugHighlight", FillColor=Color3.fromRGB(220,40,40), OutlineColor=Color3.fromRGB(255,255,255),
-            FillTransparency=0.25, OutlineTransparency=0, DepthMode=Enum.HighlightDepthMode.AlwaysOnTop}, char)
-        highlights[plr]=h; h.Enabled = showHighlight
-    end
-    plr.CharacterAdded:Connect(onChar); if plr.Character then onChar(plr.Character) end
-end
-for _,p in ipairs(Players:GetPlayers()) do if p~=lp then attachNameTag(p); attachHighlight(p) end end
-Players.PlayerAdded:Connect(function(p) attachNameTag(p); attachHighlight(p) end)
-Players.PlayerRemoving:Connect(function(p) if nameTags[p] then nameTags[p]:Destroy(); nameTags[p]=nil end; if highlights[p] then highlights[p]:Destroy(); highlights[p]=nil end end)
+local visualOn=false
+local showESP=false
+local showNames=false
+local showDist=false
 
-local btnNames = makeToggle(pageVisual, "Nombres: OFF", 10, function(b)
-    showNames = not showNames
-    for _,bb in pairs(nameTags) do if bb and bb.Parent then bb.Enabled=showNames end end
-    setBtnState(b, "Nombres: ", showNames)
-end); setBtnState(btnNames, "Nombres: ", showNames)
+local btnVisual = mk("TextButton",{Size=UDim2.new(1,-24,0,34), Position=UDim2.new(0,12,0,10),
+    BackgroundColor3=Color3.fromRGB(120,50,50), BorderSizePixel=0, Font=Enum.Font.GothamBold, TextSize=14, Text="Visual: OFF", TextColor3=Color3.new(1,1,1)}, pageVisual)
+mk("UIStroke",{Thickness=1.8, Transparency=0.4, Color=Color3.fromRGB(70,70,110)}, btnVisual); styleButton(btnVisual)
+btnVisual.MouseButton1Click:Connect(function() visualOn = not visualOn; setToggle(btnVisual, "Visual: ", visualOn) end)
 
-local btnESP = makeToggle(pageVisual, "Resaltar (rojo): OFF", 50, function(b)
-    showHighlight = not showHighlight
-    for _,h in pairs(highlights) do if h and h.Parent then h.Enabled=showHighlight end end
-    setBtnState(b, "Resaltar (rojo): ", showHighlight)
-end); setBtnState(btnESP, "Resaltar (rojo): ", showHighlight)
+local btnESP = mk("TextButton",{Size=UDim2.new(1,-24,0,34), Position=UDim2.new(0,12,0,50),
+    BackgroundColor3=Color3.fromRGB(120,50,50), BorderSizePixel=0, Font=Enum.Font.GothamBold, TextSize=14, Text="Marcar enemigos (rojo): OFF", TextColor3=Color3.new(1,1,1)}, pageVisual)
+mk("UIStroke",{Thickness=1.8, Transparency=0.4, Color=Color3.fromRGB(70,70,110)}, btnESP); styleButton(btnESP)
+local btnNames = mk("TextButton",{Size=UDim2.new(1,-24,0,34), Position=UDim2.new(0,12,0,90),
+    BackgroundColor3=Color3.fromRGB(120,50,50), BorderSizePixel=0, Font=Enum.Font.GothamBold, TextSize=14, Text="Nombres: OFF", TextColor3=Color3.new(1,1,1)}, pageVisual)
+mk("UIStroke",{Thickness=1.8, Transparency=0.4, Color=Color3.fromRGB(70,70,110)}, btnNames); styleButton(btnNames)
+local btnDist = mk("TextButton",{Size=UDim2.new(1,-24,0,34), Position=UDim2.new(0,12,0,130),
+    BackgroundColor3=Color3.fromRGB(120,50,50), BorderSizePixel=0, Font=Enum.Font.GothamBold, TextSize=14, Text="Distancia: OFF", TextColor3=Color3.new(1,1,1)}, pageVisual)
+mk("UIStroke",{Thickness=1.8, Transparency=0.4, Color=Color3.fromRGB(70,70,110)}, btnDist); styleButton(btnDist)
+
+btnESP.MouseButton1Click:Connect(function() showESP = not showESP; setToggle(btnESP, "Marcar enemigos (rojo): ", showESP) end)
+btnNames.MouseButton1Click:Connect(function() showNames = not showNames; setToggle(btnNames, "Nombres: ", showNames) end)
+btnDist.MouseButton1Click:Connect(function() showDist = not showDist; setToggle(btnDist, "Distancia: ", showDist) end)
+
+-- Implementación de etiquetas y highlights
+local nameTags, distTags, highlights = {}, {}, {}
+local function onCharFor(p)
+    if p==lp then return end
+    local char = p.Character; if not char then return end
+    local head = char:FindFirstChild("Head")
+    if not head then return end
+
+    -- Name tag
+    do
+        if nameTags[p] then nameTags[p]:Destroy() end
+        local bb = Instance.new("BillboardGui"); bb.Size=UDim2.fromOffset(200,50); bb.StudsOffset=Vector3.new(0,2.8,0); bb.AlwaysOnTop=true; bb.Parent=head
+        local tl = Instance.new("TextLabel"); tl.BackgroundTransparency=1; tl.Size=UDim2.new(1,0,0,20); tl.Position=UDim2.new(0,0,0,0)
+        tl.Font=Enum.Font.GothamBold; tl.TextSize=16; tl.TextColor3=Color3.fromRGB(255,255,255); tl.TextStrokeTransparency=0.5
+        tl.Text = p.DisplayName.." (@"..p.Name..")"; tl.Parent=bb
+        bb.Enabled = showNames and visualOn
+        nameTags[p]=bb
+    end
+
+    -- Dist tag
+    do
+        if distTags[p] then distTags[p]:Destroy() end
+        local bb = Instance.new("BillboardGui"); bb.Size=UDim2.fromOffset(120,24); bb.StudsOffset=Vector3.new(0,1.8,0); bb.AlwaysOnTop=true; bb.Parent=head
+        local tl = Instance.new("TextLabel"); tl.BackgroundTransparency=1; tl.Size=UDim2.new(1,0,1,0)
+        tl.Font=Enum.Font.Gotham; tl.TextSize=12; tl.TextColor3=Color3.fromRGB(200,220,255)
+        tl.Text = "dist: --m"; tl.Parent=bb
+        bb.Enabled = showDist and visualOn
+        distTags[p]=bb
+    end
+
+    -- Highlight rojo (enemigos)
+    do
+        if highlights[p] then highlights[p]:Destroy() end
+        local h = Instance.new("Highlight"); h.FillColor=Color3.fromRGB(220,40,40); h.OutlineColor=Color3.fromRGB(255,255,255)
+        h.FillTransparency=0.25; h.OutlineTransparency=0; h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop; h.Parent=char
+        -- visible solo si showESP y (enemigo si Teams)
+        local isEnemy = true
+        if USE_TEAMS_ONLY and Teams and lp.Team and p.Team then isEnemy = (lp.Team ~= p.Team) end
+        h.Enabled = visualOn and showESP and isEnemy
+        highlights[p]=h
+    end
+end
+
+for _,p in ipairs(Players:GetPlayers()) do if p~=lp then
+    p.CharacterAdded:Connect(function() task.delay(0.2, function() onCharFor(p) end) end)
+    if p.Character then onCharFor(p) end
+end end
+Players.PlayerAdded:Connect(function(p)
+    if p==lp then return end
+    p.CharacterAdded:Connect(function() task.delay(0.2, function() onCharFor(p) end) end)
+end)
+Players.PlayerRemoving:Connect(function(p)
+    if nameTags[p] then nameTags[p]:Destroy(); nameTags[p]=nil end
+    if distTags[p] then distTags[p]:Destroy(); distTags[p]=nil end
+    if highlights[p] then highlights[p]:Destroy(); highlights[p]=nil end
+end)
+
+-- Update toggles visuales
+RS.RenderStepped:Connect(function()
+    for p,bb in pairs(nameTags) do if bb and bb.Parent then bb.Enabled = visualOn and showNames end end
+    for p,bb in pairs(distTags) do
+        if bb and bb.Parent then
+            bb.Enabled = visualOn and showDist
+            if bb.Enabled then
+                local char = p.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                local my = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+                if hrp and my then
+                    local d = (hrp.Position - my.Position).Magnitude
+                    bb:FindFirstChildOfClass("TextLabel").Text = ("dist: %dm"):format(d//1)
+                end
+            end
+        end
+    end
+    for p,h in pairs(highlights) do
+        if h and h.Parent then
+            local isEnemy = true
+            if USE_TEAMS_ONLY and Teams and lp.Team and p.Team then isEnemy = (lp.Team ~= p.Team) end
+            h.Enabled = visualOn and showESP and isEnemy
+        end
+    end
+end)
 
 -------------------------
 --         OTROS       --
 -------------------------
 -- Invisible
 local invisOn=false
-local function setCharacterLocalTransparency(char, val)
+local btnInvis = mk("TextButton",{Size=UDim2.new(1,-24,0,34), Position=UDim2.new(0,12,0,10),
+    BackgroundColor3=Color3.fromRGB(120,50,50), BorderSizePixel=0, Font=Enum.Font.GothamBold, TextSize=14, Text="Invisible: OFF", TextColor3=Color3.new(1,1,1)}, pageOtros)
+mk("UIStroke",{Thickness=1.8, Transparency=0.4, Color=Color3.fromRGB(70,70,110)}, btnInvis); styleButton(btnInvis)
+local function setLocalTransparency(char, val)
     for _,d in ipairs(char:GetDescendants()) do
-        if d:IsA("BasePart") then d.LocalTransparencyModifier=val
-        elseif d:IsA("Decal") then d.Transparency=val end
+        if d:IsA("BasePart") then d.LocalTransparencyModifier = val
+        elseif d:IsA("Decal") then d.Transparency = val end
     end
 end
-local function enableInvisible()
-    local char=lp.Character; if not char then return end
-    setCharacterLocalTransparency(char,1)
-    local hum=char:FindFirstChildOfClass("Humanoid"); if hum then hum.NameDisplayDistance=0 end
-end
-local function disableInvisible()
-    local char=lp.Character; if not char then return end
-    setCharacterLocalTransparency(char,0)
-    local hum=char:FindFirstChildOfClass("Humanoid"); if hum then hum.NameDisplayDistance=100 end
-end
-local btnInvis = makeToggle(pageOtros, "Invisible: OFF", 10, function(b)
+btnInvis.MouseButton1Click:Connect(function()
     invisOn = not invisOn
-    if invisOn then enableInvisible() else disableInvisible() end
-    setBtnState(b, "Invisible: ", invisOn)
-end); setBtnState(btnInvis, "Invisible: ", invisOn)
+    setToggle(btnInvis, "Invisible: ", invisOn)
+    local c = lp.Character; if not c then return end
+    if invisOn then setLocalTransparency(c,1) else setLocalTransparency(c,0) end
+end)
 
--- Freecam
+-- Freecam modo foto
 local freecamOn=false
 local prevCamType, prevCamSubj, prevCamCF, savedAnchor
 local fcConn, mouseConn
@@ -709,12 +720,14 @@ local function setMouseLock(lock)
     if lock then UIS.MouseIconEnabled=false; UIS.MouseBehavior=Enum.MouseBehavior.LockCurrentPosition
     else UIS.MouseBehavior=Enum.MouseBehavior.Default; UIS.MouseIconEnabled=true end
 end
+local btnFree = mk("TextButton",{Size=UDim2.new(1,-24,0,34), Position=UDim2.new(0,12,0,50),
+    BackgroundColor3=Color3.fromRGB(120,50,50), BorderSizePixel=0, Font=Enum.Font.GothamBold, TextSize=14, Text="Foto (Freecam): OFF", TextColor3=Color3.new(1,1,1)}, pageOtros)
+mk("UIStroke",{Thickness=1.8, Transparency=0.4, Color=Color3.fromRGB(70,70,110)}, btnFree); styleButton(btnFree)
 local function fcStart()
     if freecamOn then return end
-    local cam=Workspace.CurrentCamera
-    local hum,hrp=(lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")), (lp.Character and lp.Character:FindFirstChild("HumanoidRootPart"))
+    local cam=Workspace.CurrentCamera; local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid"); local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
     if not (cam and hum and hrp) then return end
-    freecamOn=true
+    freecamOn=true; setToggle(btnFree, "Foto (Freecam): ", true)
     prevCamType, prevCamSubj, prevCamCF = cam.CameraType, cam.CameraSubject, cam.CFrame
     savedAnchor = hrp.Anchored; hrp.Anchored=true; hum.AutoRotate=false; hum.PlatformStand=true
     cam.CameraType=Enum.CameraType.Scriptable; setMouseLock(true); yaw=0; pitch=0
@@ -728,8 +741,8 @@ local function fcStart()
     fcConn = RS.RenderStepped:Connect(function(dt)
         if not freecamOn then return end
         local cam=Workspace.CurrentCamera
-        local rot = CFrame.Angles(0,yaw,0)*CFrame.Angles(pitch,0,0)
-        local f,r,u=rot.LookVector, rot.RightVector, rot.UpVector
+        local rot=CFrame.Angles(0,yaw,0)*CFrame.Angles(pitch,0,0)
+        local f,r,u=rot.LookVector,rot.RightVector,rot.UpVector
         local move=Vector3.zero
         if UIS:IsKeyDown(Enum.KeyCode.W) then move+=f end
         if UIS:IsKeyDown(Enum.KeyCode.S) then move-=f end
@@ -743,52 +756,43 @@ local function fcStart()
 end
 local function fcStop()
     if not freecamOn then return end
-    freecamOn=false
+    freecamOn=false; setToggle(btnFree, "Foto (Freecam): ", false)
     if fcConn then fcConn:Disconnect(); fcConn=nil end
     if mouseConn then mouseConn:Disconnect(); mouseConn=nil end
     setMouseLock(false)
-    local cam=Workspace.CurrentCamera
-    local hum,hrp=(lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")), (lp.Character and lp.Character:FindFirstChild("HumanoidRootPart"))
+    local cam=Workspace.CurrentCamera; local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid"); local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
     if hrp and savedAnchor~=nil then hrp.Anchored=savedAnchor end
     if hum then hum.AutoRotate=true; hum.PlatformStand=false end
     if cam then cam.CameraType=prevCamType or Enum.CameraType.Custom; cam.CameraSubject=prevCamSubj or (hum or hrp); cam.CFrame=prevCamCF or cam.CFrame end
 end
-local btnFree = makeToggle(pageOtros, "Foto (Freecam): OFF", 50, function(b)
-    if freecamOn then fcStop() else fcStart() end
-    setBtnState(b, "Foto (Freecam): ", freecamOn)
-end); setBtnState(btnFree, "Foto (Freecam): ", freecamOn)
-
-lp.CharacterAdded:Connect(function()
-    if freecamOn then fcStop() end
-    if invisOn then task.wait(0.2); enableInvisible() end
-end)
+btnFree.MouseButton1Click:Connect(function() if freecamOn then fcStop() else fcStart() end end)
+lp.CharacterAdded:Connect(function() if freecamOn then fcStop() end end)
 
 -------------------------
 --       CRÉDITOS      --
 -------------------------
 mk("TextLabel",{BackgroundTransparency=1, Size=UDim2.new(1,-24,0,24), Position=UDim2.new(0,12,0,10),
     Font=Enum.Font.GothamBlack, TextSize=16, TextColor3=Color3.fromRGB(235,235,255), TextXAlignment=Enum.TextXAlignment.Left,
-    Text="creador: pedri.exe / Nakamy"}, pageCred)
-mk("TextLabel",{BackgroundTransparency=1, Size=UDim2.new(1,-24,0,22), Position=UDim2.new(0,12,0,40),
+    Text="creador: by pedri.exe"}, pageCred)
+mk("TextLabel",{BackgroundTransparency=1, Size=UDim2.new(1,-24,0,22), Position=UDim2.new(0,12,0,38),
     Font=Enum.Font.Gotham, TextSize=14, TextColor3=Color3.fromRGB(220,220,240), TextXAlignment=Enum.TextXAlignment.Left,
-    Text="versión: V6"}, pageCred)
-local credBtn = makeToggle(pageCred, "Discord: "..DISCORD_LINK.."  (clic para copiar)", 72, function(b)
-    if setclipboard then setclipboard(DISCORD_LINK) end
-    b.Text = "¡Copiado! "..DISCORD_LINK
-end)
+    Text="discord: "..DISCORD_LINK}, pageCred)
+mk("TextLabel",{BackgroundTransparency=1, Size=UDim2.new(1,-24,0,22), Position=UDim2.new(0,12,0,62),
+    Font=Enum.Font.Gotham, TextSize=14, TextColor3=Color3.fromRGB(220,220,240), TextXAlignment=Enum.TextXAlignment.Left,
+    Text="versión: 1.30.130"}, pageCred)
 
 -------------------------
---   TECLA L (toggle)  --
+--     TECLA L UI      --
 -------------------------
 local function openMain()
     if main.Visible then return end
-    main.Visible=true
-    main.Size=UDim2.fromOffset(780, 0)
-    TS:Create(main, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size=UDim2.fromOffset(780,460)}):Play()
+    main.Visible = true
+    main.Size = UDim2.fromOffset(820, 0)
+    TS:Create(main, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size=UDim2.fromOffset(820,520)}):Play()
 end
 local function closeMain()
     if not main.Visible then return end
-    TS:Create(main, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Size=UDim2.fromOffset(780,0)}):Play()
+    TS:Create(main, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Size=UDim2.fromOffset(820,0)}):Play()
     task.delay(0.22, function() main.Visible=false end)
 end
 UIS.InputBegan:Connect(function(input, gp)
@@ -798,23 +802,28 @@ UIS.InputBegan:Connect(function(input, gp)
 end)
 
 -------------------------
---   ACCIÓN DEL LOGIN  --
+--   FLUJO CARGA->LOGIN
 -------------------------
-loginBtn.MouseButton1Click:Connect(function()
+task.delay(10, function() -- 10 segundos
+    if loader then loader:Destroy() end
+    login.Visible = true
+    -- animación de entrada
+    local scale = mk("UIScale",{Scale=0.92}, login)
+    TS:Create(scale, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Scale=1}):Play()
+end)
+
+local function toast(txt, dur)
+    pcall(function() SG:SetCore("SendNotification", {Title=TITLE, Text=txt, Duration=dur or 5}) end)
+end
+
+btnEnter.MouseButton1Click:Connect(function()
     if keyBox.Text == ACCESS_KEY then
-        clickableBanner("bienvenido si nesesitas ayuda ven al discord "..DISCORD_LINK, DISCORD_LINK, 9)
-        -- cierre del login con efecto
-        TS:Create(scl, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Scale=0.96}):Play()
-        TS:Create(loginOverlay, TweenInfo.new(0.16), {BackgroundTransparency=1}):Play()
-        TS:Create(loginFrame, TweenInfo.new(0.18), {BackgroundTransparency=1}):Play()
-        task.delay(0.2, function()
-            if loginOverlay then loginOverlay:Destroy() end
-            if loginFrame then loginFrame:Destroy() end
-            openMain()
-        end)
+        clickableBanner("Bienvenido. Si necesitas ayuda ven al discord "..DISCORD_LINK, DISCORD_LINK, 9)
+        TS:Create(login, TweenInfo.new(0.18), {BackgroundTransparency=1}):Play()
+        task.delay(0.18, function() if login then login:Destroy() end; openMain() end)
     else
         toast("Key incorrecta.", 5)
-        loginBtn.BackgroundColor3 = Color3.fromRGB(150,50,50)
-        task.delay(0.4, function() loginBtn.BackgroundColor3 = Color3.fromRGB(45,130,90) end)
+        btnEnter.BackgroundColor3 = Color3.fromRGB(150,50,50)
+        task.delay(0.4, function() btnEnter.BackgroundColor3 = Color3.fromRGB(45,130,90) end)
     end
 end)
