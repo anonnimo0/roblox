@@ -143,44 +143,6 @@ local function hardSlider(parent, y, minV, maxV, defV, color, onChange)
     }
 end
 
--------------------------
---   PANTALLA CARGA    --
--------------------------
-local gui = Instance.new("ScreenGui")
-gui.Name = "FoxyLeaksUI"
-gui.ResetOnSpawn = false
-pcall(function() gui.Parent = game.CoreGui end)
-if not gui.Parent then gui.Parent = lp:WaitForChild("PlayerGui") end
-
-local loader = mk("Frame",{Size=UDim2.fromScale(1,1), BackgroundColor3=Color3.fromRGB(5,5,10)}, gui)
-local barBox = mk("Frame",{Size=UDim2.new(0.5,0,0,12), Position=UDim2.new(0.25,0,0.6,0),
-    BackgroundColor3=Color3.fromRGB(18,18,26), BorderSizePixel=0}, loader)
-mk("UIStroke",{Thickness=2, Transparency=0.2, Color=Color3.fromRGB(80,140,255)}, barBox)
-local barFill = mk("Frame",{Size=UDim2.new(0,0,1,0), BackgroundColor3=Color3.fromRGB(80,140,255), BorderSizePixel=0}, barBox)
-local txtLoad = mk("TextLabel",{BackgroundTransparency=1, Size=UDim2.new(1,0,0,24), Position=UDim2.new(0,0,0.6,-36),
-    Font=Enum.Font.GothamBlack, TextSize=18, TextColor3=Color3.fromRGB(220,220,255), Text="Ajustando el juego …"}, loader)
-
--- animación puntos
-task.spawn(function()
-    local dots = 0
-    while loader.Parent do
-        dots = (dots+1)%4
-        txtLoad.Text = "Ajustando el juego " .. string.rep(".", dots)
-        task.wait(0.5)
-    end
-end)
-
--- Progreso 10s
-task.spawn(function()
-    local dur = 10
-    local t0 = os.clock()
-    while os.clock() - t0 < dur do
-        local rel = (os.clock()-t0)/dur
-        barFill.Size = UDim2.new(rel,0,1,0)
-        task.wait()
-    end
-    barFill.Size = UDim2.new(1,0,1,0)
-end)
 
 -------------------------
 --        LOGIN        --
