@@ -144,6 +144,41 @@ local function hardSlider(parent, y, minV, maxV, defV, color, onChange)
 end
 
 
+
+
+-- [ELIMINA COMPLETAMENTE] el bloque:
+--[[
+-------------------------
+--   PANTALLA CARGA    --
+-------------------------
+local loader = mk("Frame", ... )
+...
+task.spawn(function() ... end) -- progreso 10s
+]]
+
+-- [ELIMINA COMPLETAMENTE] el bloque:
+--[[
+-------------------------
+--   FLUJO CARGA->LOGIN
+-------------------------
+task.delay(10, function()
+    if loader then loader:Destroy() end
+    login.Visible = true
+    local scale = mk("UIScale",{Scale=0.92}, login)
+    TS:Create(scale, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Scale=1}):Play()
+end)
+]]
+
+-- [AÑADE ESTO] justo DESPUÉS de crear el login (donde defines `login` y sus hijos):
+login.Visible = true
+do
+    local scale = Instance.new("UIScale")
+    scale.Scale = 0.92
+    scale.Parent = login
+    TS:Create(scale, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Scale = 1}):Play()
+end
+
+
 -------------------------
 --        LOGIN        --
 -------------------------
