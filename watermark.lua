@@ -1,610 +1,1023 @@
---[[
-Foxxy's Leaks — Admin Menu (SANTOWARE-style)
-Autor: pedri.exe
-Lenguaje: Lua (Roblox LocalScript)
+--// Foxxy's Leaks — Admin/Debug UI (para TU experiencia)
+--// Login con key -> 4 menús: Movimiento (velocidad, noclip, salto, fly + slider),
+--//                      Visual (nombres + highlight),
+--//                      Créditos,
+--//                      Otros (Invisible, Foto/Freecam)
+--// Fondo de estrellas, tecla L para ocultar/mostrar
+--// Pie: "programador: by pedri.exe"
 
-⚠️ Ética/uso: interfaz pensada para tus propios juegos/zonas de prueba. Nada de afectar a otros jugadores.
-- "Aimbot" aquí es una asistencia de mira **solo para dianas de práctica** (tags `AimTarget` o carpeta `workspace.AimTargets`).
+-------------------------
+--    CONFIGURACIÓN    --
+-------------------------
+local ACCESS_KEY = "HJGL-FKSS"
 
-Qué incluye (según pedido)
-- Login “duro” con key HJGL-FKSS, entra directo al login.
-- Menú móvil, arrastrable; tecla global L para mostrar/ocultar.
-- Sidebar por pestañas: Movimiento, Aimbot, Visual, Otros y Créditos.
-- Animaciones hover/click, estilo oscuro con acento rojo (tipo captura), “sliders duros”.
-- Pie con DisplayName (@Username).
-- Banner clicable que copia el Discord.
+-- Restringe a tus lugares/usuarios (opcional). Déjalo vacío para no restringir.
+local ALLOWED_PLACE_IDS = { }
+local ALLOWED_USER_IDS = { }
 
-Controles
-- Mostrar/Ocultar: tecla L.
-- Mover: arrastrar el contenedor.
-- Aimbot seguro: tecla C = **toggle** (queda activo hasta volver a pulsar).
+-- Velocidad (WalkSpeed)
+local SPEED_MIN, SPEED_MAX, SPEED_DEFAULT = 8, 100, 16
 
-Movimiento
-- WalkSpeed (8–120). Salto multiplicador (x0.9–x1.8). Noclip ON/OFF. Fly ON/OFF con WASD + Space/Ctrl y slider de velocidad (16–240).
+-- Salto (multiplicador via slider)
+local JUMP_MULT_MIN, JUMP_MULT_MAX, JUMP_MULT_DEFAULT = 0.9, 1.6, 1.25
+local JUMP_MAX_ABS_ADD = 28 -- tope de aumento absoluto
 
-Aimbot (práctica)
-- ON/OFF.
-- Tecla C toggle (no necesitas mantener).
-- Intensidad (1–100) = cuánto “pega” la cámara.
-- FOV: círculo ON/OFF, tamaño (30–500) y color RGB.
-- Target: diana más cercana dentro del FOV (ignora Freecam).
+-- Noclip anti-rebote
+local NOCLIP_CORRECTION_FACTOR = 0.85
 
-Visual
-- ON/OFF maestro.
-- Highlight rojo de objetos con tag `AimTarget` o `EnemyNPC`.
-- Nombres + distancia (si el objeto tiene `Name` o `DisplayName`).
+-- Fly (slider propio)
+local FLY_SPEED_MIN, FLY_SPEED_MAX, FLY_SPEED_DEFAULT = 16, 200, 64
+local FLY_TILT_STIFFNESS = 8  -- suavidad para orientar hacia la cámara
 
-Otros
-- Invisible (local) y Freecam/Foto (cámara libre; ancla el cuerpo).
+-- Freecam (modo foto)
+local FC_SPEED_DEFAULT = 40     -- velocidad base
+local FC_SENS = Vector2.new(0.003, 0.003) -- sensibilidad mouse (x, y)
 
-Créditos
-- creador: by pedri.exe
-- discord: https://discord.gg/FDjHggJF (botón copia)
-- versión: 1.30.130
---]]
+-- Discord y logo
+local DISCORD_LINK = "https://discord.gg/xQbpCEgz9E"
+local LOGO_URL = "https://cdn.discordapp.com/attachments/1392752518148395119/1413517337851592805/c851ab41-8a9e-4458-8235-cf4479d3a0ce.png?ex=68be325b&is=68bce0db&hm=2b8ce5b8398729a2f08ecf597497755d416755ae837ba8e4ee2da72e915f9edc&"
+local LOGO_ASSET_ID = "rbxassetid://0000000000" -- <- REEMPLAZA por tu assetId cuando subas el decal
 
----------------------------------------------------------------------
--- Servicios
----------------------------------------------------------------------
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
-local StarterGui = game:GetService("StarterGui")
-local CollectionService = game:GetService("CollectionService")
-local Teams = game:GetService("Teams")
+-------------------------
+--      SERVICIOS      --
+-------------------------
+local Players   = game:GetService("Players")
+local UIS       = game:GetService("UserInputService")
+local TS        = game:GetService("TweenService")
+local RS        = game:GetService("RunService")
+local SG        = game:GetService("StarterGui")
+local Workspace = game:GetService("Workspace")
 
-local LP = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
+local lp = Players.LocalPlayer
 
----------------------------------------------------------------------
--- Helpers
----------------------------------------------------------------------
-local function clamp(x,a,b) return math.max(a, math.min(b,x)) end
-local function safeSetClipboard(text)
-	pcall(function() if setclipboard then setclipboard(text) end end)
+-------------------------
+--      GUARDAS        --
+-------------------------
+local function isAllowedPlace()
+    if #ALLOWED_PLACE_IDS == 0 then return true end
+    for _,id in ipairs(ALLOWED_PLACE_IDS) do
+        if id == game.PlaceId then return true end
+    end
+    return false
 end
-local function getChar(p) return p.Character or p.CharacterAdded:Wait() end
-local function getRoot(c) return c and c:FindFirstChild("HumanoidRootPart") end
-local function hum(c) return c and c:FindFirstChildOfClass("Humanoid") end
-local function w2s(pos) local v,on = Camera:WorldToViewportPoint(pos); return Vector2.new(v.X,v.Y), on end
+local function isAllowedUser()
+    if #ALLOWED_USER_IDS == 0 then return true end
+    for _,id in ipairs(ALLOWED_USER_IDS) do
+        if id == lp.UserId then return true end
+    end
+    return false
+end
+if not isAllowedPlace() or not isAllowedUser() then
+    warn("[FoxxysLeaks] No autorizado en este lugar/usuario. Configura ALLOWED_* en el script.")
+    return
+end
 
----------------------------------------------------------------------
--- Tema (oscuro + acento rojo, estilo captura)
----------------------------------------------------------------------
-local Colors = {
-	bg = Color3.fromRGB(12,12,14),
-	panel = Color3.fromRGB(20,20,24),
-	stroke = Color3.fromRGB(48,48,54),
-	text = Color3.fromRGB(235,235,235),
-	muted = Color3.fromRGB(150,150,160),
-	accent = Color3.fromRGB(255,70,70)
+-------------------------
+--       GUI BASE      --
+-------------------------
+local gui = Instance.new("ScreenGui")
+gui.Name = "FoxyLeaksUI"
+gui.ResetOnSpawn = false
+pcall(function() gui.Parent = game.CoreGui end)
+if not gui.Parent then gui.Parent = lp:WaitForChild("PlayerGui") end
+
+-------------------------
+--     LOGIN (KEY)     --
+-------------------------
+local loginFrame = Instance.new("Frame")
+loginFrame.Size = UDim2.fromOffset(360, 160)
+loginFrame.Position = UDim2.new(0.5, -180, 0.35, 0)
+loginFrame.BackgroundColor3 = Color3.fromRGB(12,12,16)
+loginFrame.BorderSizePixel = 0
+loginFrame.Parent = gui
+Instance.new("UICorner", loginFrame).CornerRadius = UDim.new(0, 12)
+
+local title = Instance.new("TextLabel")
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.TextColor3 = Color3.fromRGB(235,235,255)
+title.Text = "Foxxy's Leaks — Login"
+title.Size = UDim2.new(1, -20, 0, 32)
+title.Position = UDim2.new(0, 10, 0, 10)
+title.Parent = loginFrame
+
+local keyBox = Instance.new("TextBox")
+keyBox.Size = UDim2.new(1, -20, 0, 36)
+keyBox.Position = UDim2.new(0, 10, 0, 56)
+keyBox.BackgroundColor3 = Color3.fromRGB(24,24,32)
+keyBox.TextColor3 = Color3.fromRGB(255,255,255)
+keyBox.PlaceholderText = "Ingresa la key"
+keyBox.Text = ""
+keyBox.ClearTextOnFocus = false
+keyBox.Font = Enum.Font.Gotham
+keyBox.TextSize = 14
+keyBox.Parent = loginFrame
+Instance.new("UICorner", keyBox).CornerRadius = UDim.new(0, 8)
+
+local loginBtn = Instance.new("TextButton")
+loginBtn.Size = UDim2.new(1, -20, 0, 36)
+loginBtn.Position = UDim2.new(0, 10, 0, 100)
+loginBtn.BackgroundColor3 = Color3.fromRGB(45,130,90)
+loginBtn.TextColor3 = Color3.fromRGB(255,255,255)
+loginBtn.Font = Enum.Font.GothamBold
+loginBtn.TextSize = 14
+loginBtn.Text = "Entrar"
+loginBtn.Parent = loginFrame
+Instance.new("UICorner", loginBtn).CornerRadius = UDim.new(0, 8)
+
+local info = Instance.new("TextLabel")
+info.BackgroundTransparency = 1
+info.TextColor3 = Color3.fromRGB(180,180,200)
+info.Font = Enum.Font.Gotham
+info.TextSize = 12
+info.Text = "Key requerida para continuar"
+info.Size = UDim2.new(1, -20, 0, 16)
+info.Position = UDim2.new(0, 10, 1, -22)
+info.Parent = loginFrame
+
+local function toast(txt, dur)
+    pcall(function()
+        SG:SetCore("SendNotification", {
+            Title = "Foxxy's Leaks";
+            Text = txt;
+            Duration = dur or 5;
+        })
+    end)
+end
+
+-- Banner clicable (copia al hacer clic) — duración 9s
+local function clickableBanner(message, link, duration)
+    duration = duration or 9
+    local banner = Instance.new("TextButton")
+    banner.AutoButtonColor = true
+    banner.Text = message .. "  (clic para copiar)"
+    banner.Font = Enum.Font.GothamSemibold
+    banner.TextSize = 14
+    banner.TextXAlignment = Enum.TextXAlignment.Left
+    banner.TextColor3 = Color3.fromRGB(235,235,255)
+    banner.Size = UDim2.new(1, -20, 0, 36)
+    banner.Position = UDim2.new(0, 10, 0, -40)
+    banner.BackgroundColor3 = Color3.fromRGB(28,28,40)
+    banner.BorderSizePixel = 0
+    banner.ZIndex = 100
+    banner.Parent = gui
+    Instance.new("UICorner", banner).CornerRadius = UDim.new(0, 8)
+
+    TS:Create(banner, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {Position = UDim2.new(0, 10, 0, 10)}):Play()
+    banner.MouseButton1Click:Connect(function()
+        if setclipboard then
+            setclipboard(link)
+            banner.Text = "¡Copiado! " .. link
+        end
+    end)
+    task.delay(duration, function()
+        if banner and banner.Parent then
+            TS:Create(banner, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+                {Position = UDim2.new(0, 10, 0, -40)}):Play()
+            task.delay(0.25, function() if banner then banner:Destroy() end end)
+        end
+    end)
+end
+
+-------------------------
+--  VENTANA PRINCIPAL  --
+-------------------------
+local main = Instance.new("Frame")
+main.Size = UDim2.fromOffset(560, 0)
+main.Position = UDim2.new(0.5, -280, 0.2, 0)
+main.BackgroundColor3 = Color3.fromRGB(12,12,18)
+main.BorderSizePixel = 0
+main.Visible = false
+main.Parent = gui
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 16)
+
+-- >>> Mejora visual: Degradado + Borde brillante + Glow
+local mainGrad = Instance.new("UIGradient", main)
+mainGrad.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(22,22,34)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(10,10,16))
 }
+mainGrad.Rotation = 90
+TS:Create(mainGrad, TweenInfo.new(8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, math.huge, true),
+    {Offset = Vector2.new(0, 0.25)}):Play()
 
----------------------------------------------------------------------
--- UI raíz
----------------------------------------------------------------------
-local Gui = Instance.new("ScreenGui")
-Gui.Name = "FoxxysLeaksAdmin_SANTO"
-Gui.IgnoreGuiInset = true
-Gui.ResetOnSpawn = false
-Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-Gui.Parent = LP:WaitForChild("PlayerGui")
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Thickness = 1.25
+mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+mainStroke.Transparency = 0.35
+mainStroke.Parent = main
+local strokeGrad = Instance.new("UIGradient", mainStroke)
+strokeGrad.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(120,70,180)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(70,120,220))
+}
+TS:Create(strokeGrad, TweenInfo.new(5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, math.huge, true),
+    {Rotation = 180}):Play()
 
----------------------------------------------------------------------
--- Login
----------------------------------------------------------------------
-local KEY = "HJGL-FKSS"
-local authed = false
+-- Capa de estrellas (fondo)
+local starLayer = Instance.new("Frame")
+starLayer.BackgroundTransparency = 1
+starLayer.Size = UDim2.fromScale(1,1)
+starLayer.ClipsDescendants = true
+starLayer.ZIndex = 0
+starLayer.Parent = main
 
-local Login = Instance.new("Frame")
-Login.Size = UDim2.new(1,0,1,0)
-Login.BackgroundColor3 = Colors.bg
-Login.BorderSizePixel = 0
-Login.Parent = Gui
+-- Contenido
+local content = Instance.new("Frame")
+content.BackgroundTransparency = 1
+content.Size = UDim2.fromScale(1,1)
+content.ZIndex = 2
+content.Parent = main
 
-local Box = Instance.new("Frame")
-Box.AnchorPoint = Vector2.new(0.5,0.5)
-Box.Position = UDim2.new(0.5,0,0.5,0)
-Box.Size = UDim2.new(0, 420, 0, 220)
-Box.BackgroundColor3 = Colors.panel
-Box.BorderSizePixel = 0
-Box.Parent = Login
-local BoxStroke = Instance.new("UIStroke") BoxStroke.Color=Colors.accent BoxStroke.Thickness=2 BoxStroke.Parent=Box
+-- TopBar con logo + título + glow inferior
+local topBar = Instance.new("Frame")
+topBar.Size = UDim2.new(1, 0, 0, 52)
+topBar.BackgroundColor3 = Color3.fromRGB(16,16,24)
+topBar.BorderSizePixel = 0
+topBar.ZIndex = 3
+topBar.Parent = content
+Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 16)
 
-local LTitle = Instance.new("TextLabel")
-LTitle.BackgroundTransparency=1
-LTitle.Position = UDim2.new(0,12,0,12)
-LTitle.Size = UDim2.new(1,-24,0,30)
-LTitle.Font = Enum.Font.GothamBlack
-LTitle.TextSize = 22
-LTitle.TextColor3 = Colors.text
-LTitle.TextXAlignment = Enum.TextXAlignment.Left
-LTitle.Text = "Foxxy's Leaks — Login"
-LTitle.Parent = Box
+local logo = Instance.new("ImageLabel")
+logo.BackgroundTransparency = 1
+logo.Size = UDim2.fromOffset(40, 40)
+logo.Position = UDim2.new(0, 10, 0.5, -20)
+logo.ZIndex = 4
+logo.Parent = topBar
+local okLogo = pcall(function() logo.Image = LOGO_URL end)
+if not okLogo then logo.Image = LOGO_ASSET_ID end
 
-local KeyBox = Instance.new("TextBox")
-KeyBox.BackgroundColor3 = Colors.bg
-KeyBox.BorderSizePixel = 0
-KeyBox.Position = UDim2.new(0,12,0,60)
-KeyBox.Size = UDim2.new(1,-24,0,42)
-KeyBox.Font = Enum.Font.GothamSemibold
-KeyBox.TextSize = 18
-KeyBox.TextColor3 = Colors.text
-KeyBox.ClearTextOnFocus = false
-KeyBox.PlaceholderText = "Introduce la key"
-KeyBox.Parent = Box
-local KeyStroke = Instance.new("UIStroke") KeyStroke.Color=Colors.stroke KeyStroke.Thickness=2 KeyStroke.Parent=KeyBox
+local titleMain = Instance.new("TextLabel")
+titleMain.BackgroundTransparency = 1
+titleMain.Size = UDim2.new(1, -70, 1, 0)
+titleMain.Position = UDim2.new(0, 60, 0, 0)
+titleMain.Font = Enum.Font.GothamBold
+titleMain.TextSize = 16
+titleMain.TextXAlignment = Enum.TextXAlignment.Left
+titleMain.TextColor3 = Color3.fromRGB(220,220,255)
+titleMain.Text = "Foxxy's Leaks  —  [L para ocultar/mostrar]"
+titleMain.ZIndex = 4
+titleMain.Parent = topBar
 
-local EnterBtn = Instance.new("TextButton")
-EnterBtn.BackgroundColor3 = Colors.accent
-EnterBtn.AutoButtonColor = false
-EnterBtn.Position = UDim2.new(0,12,0,112)
-EnterBtn.Size = UDim2.new(1,-24,0,42)
-EnterBtn.Font = Enum.Font.GothamBlack
-EnterBtn.TextSize = 18
-EnterBtn.TextColor3 = Colors.bg
-EnterBtn.Text = "ENTRAR"
-EnterBtn.Parent = Box
-local EStroke = Instance.new("UIStroke") EStroke.Color=Colors.accent EStroke.Thickness=2 EStroke.Parent=EnterBtn
+-- Glow bar
+local glow = Instance.new("Frame")
+glow.Size = UDim2.new(1, -20, 0, 3)
+glow.Position = UDim2.new(0, 10, 1, -3)
+glow.BackgroundTransparency = 0.2
+glow.BorderSizePixel = 0
+glow.ZIndex = 4
+glow.Parent = topBar
+local glowGrad = Instance.new("UIGradient", glow)
+glowGrad.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(80,160,255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(200,110,255))
+}
+TS:Create(glowGrad, TweenInfo.new(6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, math.huge, true),
+    {Rotation = 180}):Play()
 
-local Info = Instance.new("TextLabel")
-Info.BackgroundTransparency=1
-Info.Position = UDim2.new(0,12,1,-30)
-Info.Size = UDim2.new(1,-24,0,20)
-Info.Font = Enum.Font.Gotham
-Info.TextXAlignment = Enum.TextXAlignment.Left
-Info.TextSize = 14
-Info.TextColor3 = Colors.muted
-Info.Text = "Tema oscuro/acento rojo. Entra directo al login."
-Info.Parent = Box
+-- Pie con crédito
+local footer = Instance.new("TextLabel")
+footer.BackgroundTransparency = 1
+footer.Size = UDim2.new(1, -16, 0, 18)
+footer.Position = UDim2.new(0, 8, 1, -20)
+footer.Font = Enum.Font.Gotham
+footer.TextSize = 12
+footer.TextXAlignment = Enum.TextXAlignment.Center
+footer.TextColor3 = Color3.fromRGB(150,150,170)
+footer.Text = "programador: by pedri.exe"
+footer.ZIndex = 4
+footer.Parent = content
 
-local function pulse(btn)
-	local s = btn.Size
-	local t1 = TweenService:Create(btn,TweenInfo.new(0.08,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Size=s+UDim2.new(0,6,0,6)})
-	local t2 = TweenService:Create(btn,TweenInfo.new(0.08,Enum.EasingStyle.Quad,Enum.EasingDirection.In),{Size=s})
-	t1:Play(); t1.Completed:Wait(); t2:Play()
+-- Drag ventana
+do
+    local dragging, dragStart, startPos
+    local function update(input)
+        local delta = input.Position - dragStart
+        main.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+    topBar.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = inp.Position
+            startPos = main.Position
+            inp.Changed:Connect(function()
+                if inp.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    UIS.InputChanged:Connect(function(inp)
+        if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
+            update(inp)
+        end
+    end)
 end
 
-local function tryLogin()
-	if KeyBox.Text == KEY then
-		authed = true
-		pulse(EnterBtn)
-		Login.Visible = false
-	else
-		Info.TextColor3 = Colors.accent; Info.Text = "Key incorrecta"
-	end
+-- Tabs
+local tabs = Instance.new("Frame")
+tabs.Size = UDim2.new(1, -20, 0, 36)
+tabs.Position = UDim2.new(0, 10, 0, 60)
+tabs.BackgroundTransparency = 1
+tabs.ZIndex = 3
+tabs.Parent = content
+
+local gridTabs = Instance.new("UIListLayout")
+gridTabs.FillDirection = Enum.FillDirection.Horizontal
+gridTabs.Padding = UDim.new(0, 8)
+gridTabs.Parent = tabs
+
+local function makeTabBtn(text)
+    local b = Instance.new("TextButton")
+    b.AutoButtonColor = true
+    b.Size = UDim2.fromOffset(130, 32)
+    b.BackgroundColor3 = Color3.fromRGB(28,28,40)
+    b.TextColor3 = Color3.fromRGB(255,255,255)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 14
+    b.Text = text
+    b.ZIndex = 4
+    b.Parent = tabs
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 10)
+    local st = Instance.new("UIStroke", b); st.Thickness = 1; st.Transparency = 0.5
+    st.Color = Color3.fromRGB(60,60,90)
+    return b
 end
-EnterBtn.MouseButton1Click:Connect(tryLogin)
-KeyBox.FocusLost:Connect(function(enter) if enter then tryLogin() end end)
 
----------------------------------------------------------------------
--- Marco principal
----------------------------------------------------------------------
-local Root = Instance.new("Frame")
-Root.Size = UDim2.new(0, 860, 0, 470)
-Root.Position = UDim2.new(0.5, -430, 0.5, -235)
-Root.BackgroundColor3 = Colors.panel
-Root.BorderSizePixel = 0
-Root.Visible = false
-Root.Parent = Gui
-local RootStroke = Instance.new("UIStroke") RootStroke.Color=Colors.accent RootStroke.Thickness=2 RootStroke.Parent=Root
+local tabMove   = makeTabBtn("Movimiento")
+local tabVisual = makeTabBtn("Visual")
+local tabCred   = makeTabBtn("Créditos")
+local tabOtros  = makeTabBtn("Otros")
 
--- Drag
-local dragging=false; local dragStart; local startPos
-Root.InputBegan:Connect(function(i)
-	if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true; dragStart=i.Position; startPos=Root.Position end
+local pages = Instance.new("Frame")
+pages.Size = UDim2.new(1, -20, 1, -60-36-18)
+pages.Position = UDim2.new(0, 10, 0, 60+36+8)
+pages.BackgroundTransparency = 1
+pages.ZIndex = 3
+pages.Parent = content
+
+local pageMove = Instance.new("Frame");    pageMove.BackgroundTransparency = 1; pageMove.Size = UDim2.new(1, 0, 1, 0); pageMove.ZIndex = 3; pageMove.Parent = pages
+local pageVisual = Instance.new("Frame");  pageVisual.BackgroundTransparency = 1; pageVisual.Size = UDim2.new(1, 0, 1, 0); pageVisual.Visible = false; pageVisual.ZIndex = 3; pageVisual.Parent = pages
+local pageCred = Instance.new("Frame");    pageCred.BackgroundTransparency = 1; pageCred.Size = UDim2.new(1, 0, 1, 0); pageCred.Visible = false; pageCred.ZIndex = 3; pageCred.Parent = pages
+local pageOtros = Instance.new("Frame");   pageOtros.BackgroundTransparency = 1; pageOtros.Size = UDim2.new(1, 0, 1, 0); pageOtros.Visible = false; pageOtros.ZIndex = 3; pageOtros.Parent = pages
+
+local function switchTo(which)
+    pageMove.Visible   = (which == "move")
+    pageVisual.Visible = (which == "visual")
+    pageCred.Visible   = (which == "cred")
+    pageOtros.Visible  = (which == "otros")
+end
+tabMove.MouseButton1Click:Connect(function() switchTo("move") end)
+tabVisual.MouseButton1Click:Connect(function() switchTo("visual") end)
+tabCred.MouseButton1Click:Connect(function() switchTo("cred") end)
+tabOtros.MouseButton1Click:Connect(function() switchTo("otros") end)
+
+-------------------------
+--  ESTRELLAS (fondo)  --
+-------------------------
+local function spawnStars(container, count)
+    if container.AbsoluteSize.X < 1 then task.wait() end
+    local w, h = container.AbsoluteSize.X, container.AbsoluteSize.Y
+    for _=1, count do
+        local s = Instance.new("Frame")
+        s.Size = UDim2.fromOffset(math.random(2,4), math.random(2,4))
+        s.Position = UDim2.fromOffset(math.random(0, w), math.random(-h, h))
+        s.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        s.BackgroundTransparency = math.random() * 0.3
+        s.BorderSizePixel = 0
+        s.ZIndex = 1
+        Instance.new("UICorner", s).CornerRadius = UDim.new(1,0)
+        s.Parent = container
+
+        task.spawn(function()
+            while s.Parent do
+                local endY = h + 10
+                local dur = math.random(4,9) + math.random()
+                TS:Create(s, TweenInfo.new(dur, Enum.EasingStyle.Linear),
+                    {Position = UDim2.fromOffset(s.Position.X.Offset, endY)}):Play()
+                task.wait(dur)
+                s.Position = UDim2.fromOffset(math.random(0, w), -10)
+            end
+        end)
+    end
+end
+spawnStars(starLayer, 90)
+
+-------------------------
+--   MOVIMIENTO (UI)   --
+-------------------------
+-- Utilidad crear botón grande
+local function makeBtn(parent, text, y)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, -20, 0, 36)
+    b.Position = UDim2.new(0, 10, 0, y)
+    b.BackgroundColor3 = Color3.fromRGB(28,28,40)
+    b.TextColor3 = Color3.fromRGB(255,255,255)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 14
+    b.Text = text
+    b.ZIndex = 4
+    b.Parent = parent
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
+    return b
+end
+local function setBtnState(b, label, on)
+    b.Text = label .. (on and "ON" or "OFF")
+    b.BackgroundColor3 = on and Color3.fromRGB(45,130,90) or Color3.fromRGB(120,50,50)
+end
+
+-- Slider caminar
+local sliderBack = Instance.new("Frame")
+sliderBack.Size = UDim2.new(1, -20, 0, 10)
+sliderBack.Position = UDim2.new(0, 10, 0, 10)
+sliderBack.BackgroundColor3 = Color3.fromRGB(42,42,60)
+sliderBack.BorderSizePixel = 0
+sliderBack.ZIndex = 3
+sliderBack.Parent = pageMove
+Instance.new("UICorner", sliderBack).CornerRadius = UDim.new(0, 6)
+
+local sliderKnob = Instance.new("Frame")
+sliderKnob.Size = UDim2.fromOffset(14, 18)
+sliderKnob.Position = UDim2.new((SPEED_DEFAULT-SPEED_MIN)/(SPEED_MAX-SPEED_MIN), -7, 0.5, -9)
+sliderKnob.BackgroundColor3 = Color3.fromRGB(45,130,90)
+sliderKnob.BorderSizePixel = 0
+sliderKnob.ZIndex = 4
+sliderKnob.Parent = sliderBack
+Instance.new("UICorner", sliderKnob).CornerRadius = UDim.new(1, 0)
+
+local speedLabel = Instance.new("TextLabel")
+speedLabel.BackgroundTransparency = 1
+speedLabel.Position = UDim2.new(0, 10, 0, 32)
+speedLabel.Size = UDim2.new(1, -20, 0, 20)
+speedLabel.Font = Enum.Font.Gotham
+speedLabel.TextSize = 14
+speedLabel.TextColor3 = Color3.fromRGB(235,235,255)
+speedLabel.Text = ("Velocidad: %d"):format(SPEED_DEFAULT)
+speedLabel.ZIndex = 4
+speedLabel.Parent = pageMove
+
+local currentSpeed = SPEED_DEFAULT
+local function setSpeed(v)
+    v = math.clamp(math.floor(v + 0.5), SPEED_MIN, SPEED_MAX)
+    currentSpeed = v
+    speedLabel.Text = ("Velocidad: %d"):format(v)
+    local char = lp.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then hum.WalkSpeed = v end
+end
+setSpeed(SPEED_DEFAULT)
+
+do -- drag/click
+    local dragging = false
+    local function update(inputPosX)
+        local rel = math.clamp((inputPosX - sliderBack.AbsolutePosition.X)/sliderBack.AbsoluteSize.X, 0, 1)
+        sliderKnob.Position = UDim2.new(rel, -7, 0.5, -9)
+        setSpeed(SPEED_MIN + rel*(SPEED_MAX - SPEED_MIN))
+    end
+    sliderKnob.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            inp.Changed:Connect(function()
+                if inp.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    UIS.InputChanged:Connect(function(inp)
+        if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
+            update(inp.Position.X)
+        end
+    end)
+    sliderBack.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            update(inp.Position.X)
+        end
+    end)
+end
+
+-- Slider salto
+local jumpBack = Instance.new("Frame")
+jumpBack.Size = UDim2.new(1, -20, 0, 10)
+jumpBack.Position = UDim2.new(0, 10, 0, 70)
+jumpBack.BackgroundColor3 = Color3.fromRGB(42,42,60)
+jumpBack.BorderSizePixel = 0
+jumpBack.ZIndex = 3
+jumpBack.Parent = pageMove
+Instance.new("UICorner", jumpBack).CornerRadius = UDim.new(0, 6)
+
+local jumpKnob = Instance.new("Frame")
+jumpKnob.Size = UDim2.fromOffset(14, 18)
+jumpKnob.Position = UDim2.new((JUMP_MULT_DEFAULT-JUMP_MULT_MIN)/(JUMP_MULT_MAX-JUMP_MULT_MIN), -7, 0.5, -9)
+jumpKnob.BackgroundColor3 = Color3.fromRGB(90,120,200)
+jumpKnob.BorderSizePixel = 0
+jumpKnob.ZIndex = 4
+jumpKnob.Parent = jumpBack
+Instance.new("UICorner", jumpKnob).CornerRadius = UDim.new(1, 0)
+
+local jumpLabel = Instance.new("TextLabel")
+jumpLabel.BackgroundTransparency = 1
+jumpLabel.Position = UDim2.new(0, 10, 0, 92)
+jumpLabel.Size = UDim2.new(1, -20, 0, 20)
+jumpLabel.Font = Enum.Font.Gotham
+jumpLabel.TextSize = 14
+jumpLabel.TextColor3 = Color3.fromRGB(235,235,255)
+jumpLabel.ZIndex = 4
+jumpLabel.Parent = pageMove
+
+local baseRecorded = false
+local baseUseJumpPower, baseJumpPower, baseJumpHeight
+local jumpMult = JUMP_MULT_DEFAULT
+
+local function recordBaseJump(hum)
+    if baseRecorded then return end
+    baseUseJumpPower = hum.UseJumpPower
+    if baseUseJumpPower then baseJumpPower = hum.JumpPower else baseJumpHeight = hum.JumpHeight end
+    baseRecorded = true
+end
+local function applyJump(hum)
+    if not hum then return end
+    recordBaseJump(hum)
+    if baseUseJumpPower then
+        local target = math.min(baseJumpPower + JUMP_MAX_ABS_ADD, baseJumpPower * jumpMult)
+        hum.JumpPower = target
+        jumpLabel.Text = string.format("Salto: x%.2f  (%d)", jumpMult, math.floor(target + 0.5))
+    else
+        local target = math.min(baseJumpHeight + (JUMP_MAX_ABS_ADD/8), baseJumpHeight * jumpMult)
+        hum.JumpHeight = target
+        jumpLabel.Text = string.format("Salto: x%.2f", jumpMult)
+    end
+end
+local function setJumpByRel(rel)
+    jumpMult = JUMP_MULT_MIN + rel * (JUMP_MULT_MAX - JUMP_MULT_MIN)
+    local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")
+    if hum then applyJump(hum) end
+    jumpKnob.Position = UDim2.new(rel, -7, 0.5, -9)
+end
+setJumpByRel((JUMP_MULT_DEFAULT-JUMP_MULT_MIN)/(JUMP_MULT_MAX-JUMP_MULT_MIN))
+do
+    local dragging = false
+    local function update(inputPosX)
+        local rel = math.clamp((inputPosX - jumpBack.AbsolutePosition.X)/jumpBack.AbsoluteSize.X, 0, 1)
+        setJumpByRel(rel)
+    end
+    jumpKnob.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            inp.Changed:Connect(function() if inp.UserInputState == Enum.UserInputState.End then dragging = false end end)
+        end
+    end)
+    UIS.InputChanged:Connect(function(inp)
+        if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then update(inp.Position.X) end
+    end)
+    jumpBack.InputBegan:Connect(function(inp) if inp.UserInputType == Enum.UserInputType.MouseButton1 then update(inp.Position.X) end end)
+end
+
+-- Slider velocidad de vuelo
+local flyBack = Instance.new("Frame")
+flyBack.Size = UDim2.new(1, -20, 0, 10)
+flyBack.Position = UDim2.new(0, 10, 0, 130)
+flyBack.BackgroundColor3 = Color3.fromRGB(42,42,60)
+flyBack.BorderSizePixel = 0
+flyBack.ZIndex = 3
+flyBack.Parent = pageMove
+Instance.new("UICorner", flyBack).CornerRadius = UDim.new(0, 6)
+
+local flyKnob = Instance.new("Frame")
+flyKnob.Size = UDim2.fromOffset(14, 18)
+flyKnob.BackgroundColor3 = Color3.fromRGB(200,140,90)
+flyKnob.BorderSizePixel = 0
+flyKnob.ZIndex = 4
+flyKnob.Parent = flyBack
+Instance.new("UICorner", flyKnob).CornerRadius = UDim.new(1, 0)
+
+local flyLabel = Instance.new("TextLabel")
+flyLabel.BackgroundTransparency = 1
+flyLabel.Position = UDim2.new(0, 10, 0, 152)
+flyLabel.Size = UDim2.new(1, -20, 0, 20)
+flyLabel.Font = Enum.Font.Gotham
+flyLabel.TextSize = 14
+flyLabel.TextColor3 = Color3.fromRGB(235,235,255)
+flyLabel.ZIndex = 4
+flyLabel.Parent = pageMove
+
+local function relFromVal(val, minv, maxv) return (val - minv) / (maxv - minv) end
+local function valFromRel(rel, minv, maxv) return math.floor(minv + rel*(maxv - minv) + 0.5) end
+
+local flySpeed = FLY_SPEED_DEFAULT
+local function setFlySpeed(v)
+    v = math.clamp(math.floor(v + 0.5), FLY_SPEED_MIN, FLY_SPEED_MAX)
+    flySpeed = v
+    flyLabel.Text = ("Velocidad de vuelo: %d"):format(v)
+end
+do
+    local rel = relFromVal(FLY_SPEED_DEFAULT, FLY_SPEED_MIN, FLY_SPEED_MAX)
+    flyKnob.Position = UDim2.new(rel, -7, 0.5, -9)
+    setFlySpeed(FLY_SPEED_DEFAULT)
+end
+do
+    local dragging = false
+    local function update(inputPosX)
+        local rel = math.clamp((inputPosX - flyBack.AbsolutePosition.X)/flyBack.AbsoluteSize.X, 0, 1)
+        flyKnob.Position = UDim2.new(rel, -7, 0.5, -9)
+        setFlySpeed(valFromRel(rel, FLY_SPEED_MIN, FLY_SPEED_MAX))
+    end
+    flyKnob.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            inp.Changed:Connect(function() if inp.UserInputState == Enum.UserInputState.End then dragging = false end end)
+        end
+    end)
+    UIS.InputChanged:Connect(function(inp) if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then update(inp.Position.X) end end)
+    flyBack.InputBegan:Connect(function(inp) if inp.UserInputType == Enum.UserInputType.MouseButton1 then update(inp.Position.X) end end)
+end
+
+-- Botones: Noclip + Fly
+local noclipOn = false
+local hbConn, steppedConn
+local originalCollide = {}
+local function getHum()
+    local c = lp.Character
+    return c and c:FindFirstChildOfClass("Humanoid"), c and c:FindFirstChild("HumanoidRootPart")
+end
+local function cacheDefaults(char)
+    for _, p in ipairs(char:GetDescendants()) do
+        if p:IsA("BasePart") and originalCollide[p] == nil then originalCollide[p] = p.CanCollide end
+    end
+end
+local function setCharCollision(char, can)
+    for _, p in ipairs(char:GetDescendants()) do
+        if p:IsA("BasePart") then p.CanCollide = can; p.CanTouch = not can end
+    end
+end
+local function enableNoclip()
+    noclipOn = true
+    local char = lp.Character
+    if char then cacheDefaults(char); setCharCollision(char, false) end
+    if steppedConn then steppedConn:Disconnect() end
+    steppedConn = RS.Stepped:Connect(function()
+        if not noclipOn then return end
+        local c = lp.Character; if not c then return end
+        for _, p in ipairs(c:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = false end end
+    end)
+    if hbConn then hbConn:Disconnect() end
+    hbConn = RS.Heartbeat:Connect(function(dt)
+        if not noclipOn then return end
+        local hum, hrp = getHum()
+        if not (hum and hrp) then return end
+        local dir = hum.MoveDirection
+        if dir.Magnitude > 0 then
+            local corr = dir.Unit * (hum.WalkSpeed * dt * NOCLIP_CORRECTION_FACTOR)
+            hrp.CFrame = hrp.CFrame + Vector3.new(corr.X, 0, corr.Z)
+        end
+        hrp.AssemblyAngularVelocity = Vector3.new()
+    end)
+end
+local function disableNoclip()
+    noclipOn = false
+    if hbConn then hbConn:Disconnect(); hbConn=nil end
+    if steppedConn then steppedConn:Disconnect(); steppedConn=nil end
+    local char = lp.Character
+    if char then
+        for _, p in ipairs(char:GetDescendants()) do
+            if p:IsA("BasePart") and originalCollide[p] ~= nil then p.CanCollide = originalCollide[p]; p.CanTouch = true end
+        end
+    end
+end
+
+local btnNoclip = makeBtn(pageMove, "Atravesar paredes: OFF", 186)
+btnNoclip.MouseButton1Click:Connect(function()
+    if noclipOn then disableNoclip() else enableNoclip() end
+    setBtnState(btnNoclip, "Atravesar paredes: ", noclipOn)
 end)
-Root.InputChanged:Connect(function(i)
-	if dragging and i.UserInputType==Enum.UserInputType.MouseMovement then
-		local d=i.Position-dragStart
-		Root.Position = UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,startPos.Y.Scale,startPos.Y.Offset+d.Y)
-	end
+setBtnState(btnNoclip, "Atravesar paredes: ", noclipOn)
+
+-- Fly (WASD horizontal, Espacio sube, Ctrl baja)
+local flyOn = false
+local flyBV, flyBGyro
+local flyConn
+local btnFly = makeBtn(pageMove, "Fly: OFF", 232)
+local function enableFly()
+    if flyOn then return end
+    flyOn = true
+    local hum, hrp = getHum()
+    if not (hum and hrp) then return end
+    hum.PlatformStand = true
+    flyBV = Instance.new("BodyVelocity"); flyBV.MaxForce = Vector3.new(1e5, 1e5, 1e5); flyBV.Velocity = Vector3.zero; flyBV.Parent = hrp
+    flyBGyro = Instance.new("BodyGyro"); flyBGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5); flyBGyro.P = 1e4; flyBGyro.Parent = hrp
+    local cam = Workspace.CurrentCamera
+    flyConn = RS.RenderStepped:Connect(function(dt)
+        if not flyOn then return end
+        local look = cam.CFrame.LookVector
+        local right = cam.CFrame.RightVector
+        local flatLook, flatRight = Vector3.new(look.X,0,look.Z), Vector3.new(right.X,0,right.Z)
+        local dir = Vector3.zero
+        if UIS:IsKeyDown(Enum.KeyCode.W) then dir += flatLook end
+        if UIS:IsKeyDown(Enum.KeyCode.S) then dir -= flatLook end
+        if UIS:IsKeyDown(Enum.KeyCode.D) then dir += flatRight end
+        if UIS:IsKeyDown(Enum.KeyCode.A) then dir -= flatRight end
+        if dir.Magnitude > 0 then dir = dir.Unit else dir = Vector3.zero end
+        local up = 0
+        if UIS:IsKeyDown(Enum.KeyCode.Space) then up = 1 end
+        if UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl) then up = -1 end
+        flyBV.Velocity = Vector3.new(dir.X * flySpeed, up * flySpeed, dir.Z * flySpeed)
+        local hrpPos = hrp.Position
+        local targetCF = CFrame.lookAt(hrpPos, hrpPos + flatLook)
+        hrp.CFrame = hrp.CFrame:Lerp(targetCF, math.clamp(FLY_TILT_STIFFNESS*dt, 0, 1))
+        flyBGyro.CFrame = cam.CFrame
+    end)
+end
+local function disableFly()
+    if not flyOn then return end
+    flyOn = false
+    local hum = (lp.Character and lp.Character:FindFirstChildOfClass("Humanoid"))
+    if hum then hum.PlatformStand = false end
+    if flyConn then flyConn:Disconnect(); flyConn=nil end
+    if flyBV then flyBV:Destroy(); flyBV=nil end
+    if flyBGyro then flyBGyro:Destroy(); flyBGyro=nil end
+end
+btnFly.MouseButton1Click:Connect(function()
+    if flyOn then disableFly() else enableFly() end
+    setBtnState(btnFly, "Fly: ", flyOn)
 end)
-UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end end)
+setBtnState(btnFly, "Fly: ", flyOn)
 
--- Header y Footer
-local Header = Instance.new("TextLabel")
-Header.BackgroundTransparency=1
-Header.Position = UDim2.new(0,10,0,8)
-Header.Size = UDim2.new(1,-20,0,34)
-Header.Font = Enum.Font.GothamBlack
-Header.TextSize = 22
-Header.TextColor3 = Colors.text
-Header.TextXAlignment = Enum.TextXAlignment.Left
-Header.Text = "Foxxy's Leaks — Admin Menu"
-Header.Parent = Root
-
-local Footer = Instance.new("TextLabel")
-Footer.BackgroundTransparency=1
-Footer.Position = UDim2.new(0,10,1,-26)
-Footer.Size = UDim2.new(1,-20,0,20)
-Footer.Font = Enum.Font.Gotham
-Footer.TextSize = 14
-Footer.TextColor3 = Colors.muted
-Footer.TextXAlignment = Enum.TextXAlignment.Left
-Footer.Text = string.format("%s (@%s)", LP.DisplayName or LP.Name, LP.Name)
-Footer.Parent = Root
-
--- Banner (Discord)
-local Banner = Instance.new("TextButton")
-Banner.BackgroundColor3 = Colors.accent
-Banner.AutoButtonColor=false
-Banner.Position = UDim2.new(0,10,0,44)
-Banner.Size = UDim2.new(1,-20,0,30)
-Banner.Text = "Haz clic para copiar Discord: https://discord.gg/FDjHggJF"
-Banner.TextColor3 = Colors.bg
-Banner.Font = Enum.Font.GothamBold
-Banner.TextSize = 14
-Banner.Parent = Root
-local BStroke = Instance.new("UIStroke") BStroke.Color=Colors.accent BStroke.Thickness=2 BStroke.Parent=Banner
-Banner.MouseButton1Click:Connect(function() safeSetClipboard("https://discord.gg/FDjHggJF") end)
-
--- Sidebar (iconos) y contenido
-local Sidebar = Instance.new("Frame")
-Sidebar.BackgroundColor3 = Colors.bg
-Sidebar.BorderSizePixel=0
-Sidebar.Position = UDim2.new(0,10,0,84)
-Sidebar.Size = UDim2.new(0, 64, 1, -120)
-Sidebar.Parent = Root
-local sbStroke = Instance.new("UIStroke") sbStroke.Color=Colors.stroke sbStroke.Thickness=2 sbStroke.Parent=Sidebar
-
-local Content = Instance.new("Frame")
-Content.BackgroundColor3 = Colors.bg
-Content.BorderSizePixel=0
-Content.Position = UDim2.new(0, 84, 0, 84)
-Content.Size = UDim2.new(1, -104, 1, -120)
-Content.Parent = Root
-local ctStroke = Instance.new("UIStroke") ctStroke.Color=Colors.stroke ctStroke.Thickness=2 ctStroke.Parent=Content
-
-local function iconBtn(emoji)
-	local b=Instance.new("TextButton")
-	b.Size = UDim2.new(1,-12,0,48)
-	b.Position = UDim2.new(0,6,0,0)
-	b.Text = emoji
-	b.BackgroundColor3 = Colors.panel
-	b.TextColor3 = Colors.text
-	b.Font = Enum.Font.GothamBlack
-	b.TextSize = 22
-	b.AutoButtonColor=false
-	local s=Instance.new("UIStroke") s.Color=Colors.accent s.Thickness=2 s.Parent=b
-	b.MouseEnter:Connect(function() TweenService:Create(b,TweenInfo.new(0.1),{BackgroundColor3=Colors.accent,TextColor3=Colors.bg}):Play() end)
-	b.MouseLeave:Connect(function() TweenService:Create(b,TweenInfo.new(0.1),{BackgroundColor3=Colors.panel,TextColor3=Colors.text}):Play() end)
-	return b
-end
-
-local pages = {}
-local function addPage(emoji)
-	local btn = iconBtn(emoji) btn.Parent=Sidebar
-	local pg = Instance.new("Frame")
-	pg.BackgroundTransparency=1
-	pg.Size = UDim2.new(1,-20,1,-20)
-	pg.Position = UDim2.new(0,10,0,10)
-	pg.Visible=false
-	pg.Parent = Content
-	btn.MouseButton1Click:Connect(function()
-		for _,p in pairs(pages) do p.Visible=false end
-		pg.Visible=true
-	end)
-	table.insert(pages, pg)
-	return pg
-end
-
-local layout = Instance.new("UIListLayout") layout.Parent = Sidebar layout.Padding=UDim.new(0,8)
-
--- Pestañas (⚙ mov, 🎯 aimbot, 👁 visual, 🧰 otros, ⭐ créditos)
-local TabMov = addPage("⚙")
-local TabAim = addPage("🎯")
-local TabVis = addPage("👁")
-local TabOtr = addPage("🧰")
-local TabCre = addPage("⭐")
-
-local function vlist(parent) local l=Instance.new("UIListLayout") l.Padding=UDim.new(0,10) l.Parent=parent end
-vlist(TabMov); vlist(TabAim); vlist(TabVis); vlist(TabOtr); vlist(TabCre)
-
--- Card helper (estética panel con borde rojo)
-local function card(title, h)
-	local c = Instance.new("Frame")
-	c.BackgroundColor3 = Colors.panel
-	c.BorderSizePixel = 0
-	c.Size = UDim2.new(1,-20,0,h or 160)
-	local st = Instance.new("UIStroke") st.Color=Colors.accent st.Thickness=2 st.Parent=c
-	local tl = Instance.new("TextLabel") tl.BackgroundTransparency=1 tl.Size=UDim2.new(1,-16,0,24) tl.Position=UDim2.new(0,8,0,6)
-	tl.Font=Enum.Font.GothamBold tl.TextSize=16 tl.TextColor3=Colors.text tl.TextXAlignment=Enum.TextXAlignment.Left tl.Text=title tl.Parent=c
-	local body = Instance.new("Frame") body.BackgroundTransparency=1 body.Size=UDim2.new(1,-16,1,-34) body.Position=UDim2.new(0,8,0,30) body.Parent=c
-	local l=Instance.new("UIListLayout") l.Padding=UDim.new(0,8) l.Parent=body
-	return c, body
-end
-
--- Controles comunes -------------------------------------------------------------
-local function toggleRow(txt, default)
-	local r = Instance.new("Frame") r.BackgroundTransparency=1 r.Size=UDim2.new(1,0,0,30)
-	local l=Instance.new("TextLabel") l.BackgroundTransparency=1 l.Size=UDim2.new(1,-90,1,0) l.Text=txt l.TextXAlignment=Enum.TextXAlignment.Left l.Font=Enum.Font.Gotham l.TextSize=16 l.TextColor3=Colors.text l.Parent=r
-	local b=Instance.new("TextButton") b.Size=UDim2.new(0,74,0,26) b.Position=UDim2.new(1,-78,0.5,-13) b.Text= default and "ON" or "OFF" b.Font=Enum.Font.GothamBold b.TextSize=14 b.BackgroundColor3= default and Colors.accent or Colors.panel b.TextColor3= default and Colors.bg or Colors.text b.AutoButtonColor=false b.Parent=r
-	local s=Instance.new("UIStroke") s.Color=Colors.accent s.Thickness=2 s.Parent=b
-	local state = default or false
-	b.MouseButton1Click:Connect(function()
-		state = not state
-		b.Text = state and "ON" or "OFF"
-		TweenService:Create(b,TweenInfo.new(0.12),{BackgroundColor3= state and Colors.accent or Colors.panel, TextColor3= state and Colors.bg or Colors.text}):Play()
-		r:SetAttribute("Value", state)
-	end)
-	r:SetAttribute("Value", state)
-	return r
-end
-
-local function sliderRow(txt,min,max,default,decimals)
-	local r = Instance.new("Frame") r.BackgroundTransparency=1 r.Size=UDim2.new(1,0,0,48)
-	local l=Instance.new("TextLabel") l.BackgroundTransparency=1 l.Size=UDim2.new(1,0,0,18) l.Text=txt l.TextXAlignment=Enum.TextXAlignment.Left l.Font=Enum.Font.Gotham l.TextSize=16 l.TextColor3=Colors.text l.Parent=r
-	local bar=Instance.new("Frame") bar.BackgroundColor3=Colors.panel bar.BorderSizePixel=0 bar.Size=UDim2.new(1,-90,0,10) bar.Position=UDim2.new(0,0,0,22) bar.Parent=r
-	local bst=Instance.new("UIStroke") bst.Color=Colors.stroke bst.Thickness=2 bst.Parent=bar
-	local fill=Instance.new("Frame") fill.BackgroundColor3=Colors.accent fill.BorderSizePixel=0 fill.Size=UDim2.new(0,0,1,0) fill.Parent=bar
-	local knob=Instance.new("Frame") knob.BackgroundColor3=Colors.accent knob.BorderSizePixel=0 knob.Size=UDim2.new(0,14,0,18) knob.Position=UDim2.new(0,-7,0.5,-9) knob.Parent=bar
-	local valLbl=Instance.new("TextLabel") valLbl.BackgroundTransparency=1 valLbl.Size=UDim2.new(0,80,0,20) valLbl.Position=UDim2.new(1,-80,0,16) valLbl.Font=Enum.Font.GothamSemibold valLbl.TextSize=14 valLbl.TextColor3=Colors.text valLbl.TextXAlignment=Enum.TextXAlignment.Right valLbl.Parent=r
-	local val = default or min
-	local function setAlpha(alpha)
-		alpha = clamp(alpha,0,1)
-		val = min + (max-min)*alpha
-		if decimals and decimals>0 then local m=10^decimals val = math.floor(val*m+0.5)/m else val = math.floor(val+0.5) end
-		local px = math.floor(alpha*(bar.AbsoluteSize.X)+0.5)
-		fill.Size = UDim2.new(0,px,1,0)
-		knob.Position = UDim2.new(0,px-7,0.5,-9)
-		valLbl.Text = tostring(val)
-		r:SetAttribute("Value", val)
-	end
-	local init = (val-min)/(max-min) setAlpha(init)
-	bar.InputBegan:Connect(function(i)
-		if i.UserInputType==Enum.UserInputType.MouseButton1 then
-			local drag; drag = RunService.RenderStepped:Connect(function()
-				local ap=bar.AbsolutePosition.X; local as=bar.AbsoluteSize.X; local mx=UserInputService:GetMouseLocation().X
-				setAlpha((mx-ap)/as)
-			end)
-			local endc; endc = UserInputService.InputEnded:Connect(function(ii)
-				if ii.UserInputType==Enum.UserInputType.MouseButton1 then drag:Disconnect() endc:Disconnect() end
-			end)
-		end
-	end)
-	return r
-end
-
----------------------------------------------------------------------
--- Movimiento
----------------------------------------------------------------------
-local cMov, mov = card("Movimiento", 200) cMov.Parent = TabMov
-local ws = sliderRow("Velocidad de caminar", 8, 120, 16) ws.Parent = mov
-ws:GetAttributeChangedSignal("Value"):Connect(function()
-	local ch=getChar(LP) local h=hum(ch) if h then h.WalkSpeed = ws:GetAttribute("Value") end
+-- Respawn: restaurar estados
+lp.CharacterAdded:Connect(function(char)
+    originalCollide = {}
+    local hum = char:WaitForChild("Humanoid", 10); char:WaitForChild("HumanoidRootPart", 10)
+    if hum then
+        hum.WalkSpeed = currentSpeed
+        baseRecorded = false; recordBaseJump(hum); applyJump(hum)
+        if flyOn then task.wait(0.2); enableFly(); setBtnState(btnFly, "Fly: ", true) end
+    end
+    if noclipOn then task.wait(0.1); setCharCollision(char, false) end
 end)
 
-local jump = sliderRow("Salto (multiplicador)", 0.9, 1.8, 1.0, 2) jump.Parent = mov
-jump:GetAttributeChangedSignal("Value"):Connect(function()
-	local ch=getChar(LP) local h=hum(ch) if h then h.JumpPower = 50 * jump:GetAttribute("Value") end
-end)
+--------------------------------
+--  VISUAL (nombres + highlight)
+--------------------------------
+local showNames, showHighlight = false, false
+local nameTags, highlights = {}, {}
 
-local tNoclip = toggleRow("Atravesar paredes (Noclip)", false) tNoclip.Parent = mov
-RunService.Stepped:Connect(function()
-	if tNoclip:GetAttribute("Value") then
-		local ch = LP.Character
-		if ch then for _,p in ipairs(ch:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide=false end end end
-	end
-end)
-
-local tFly = toggleRow("Fly (WASD / Espacio / Ctrl)", false) tFly.Parent = mov
-local flySpeed = sliderRow("Velocidad de vuelo", 16, 240, 60) flySpeed.Parent = mov
-local flyConn; local dir=Vector3.new()
-local function updDir()
-	dir = Vector3.new()
-	if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir+=Camera.CFrame.LookVector end
-	if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir-=Camera.CFrame.LookVector end
-	if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir-=Camera.CFrame.RightVector end
-	if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir+=Camera.CFrame.RightVector end
-	if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir+=Vector3.new(0,1,0) end
-	if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir-=Vector3.new(0,1,0) end
+local function attachNameTag(plr)
+    if plr == lp then return end
+    local function onChar(char)
+        local head = char:WaitForChild("Head", 8); if not head then return end
+        if nameTags[plr] and nameTags[plr].Parent then nameTags[plr]:Destroy() end
+        local bb = Instance.new("BillboardGui"); bb.Name="NameTag_DBG"; bb.Size=UDim2.fromOffset(200,50); bb.StudsOffset=Vector3.new(0,2.5,0); bb.AlwaysOnTop=true; bb.Parent=head
+        local tl = Instance.new("TextLabel"); tl.BackgroundTransparency=1; tl.Size=UDim2.new(1,0,1,0); tl.Font=Enum.Font.GothamBold; tl.TextSize=16; tl.TextColor3=Color3.fromRGB(255,255,255); tl.TextStrokeTransparency=0.5
+        tl.Text = plr.DisplayName .. " (@" .. plr.Name .. ")"; tl.Parent = bb
+        nameTags[plr] = bb; bb.Enabled = showNames
+    end
+    plr.CharacterAdded:Connect(onChar); if plr.Character then onChar(plr.Character) end
 end
-UserInputService.InputBegan:Connect(function(_,g) if not g then updDir() end end)
-UserInputService.InputEnded:Connect(function(_,g) if not g then updDir() end end)
-
-local function setFly(on)
-	if on then
-		local ch=getChar(LP) local r=getRoot(ch) local h=hum(ch) if h then h.PlatformStand=true end
-		if flyConn then flyConn:Disconnect() end
-		flyConn = RunService.RenderStepped:Connect(function(dt)
-			updDir()
-			local v = dir.Magnitude>0 and dir.Unit or Vector3.new()
-			if r then r.Velocity = v * flySpeed:GetAttribute("Value") end
-		end)
-	else
-		if flyConn then flyConn:Disconnect() flyConn=nil end
-		local ch=LP.Character local h=hum(ch) if h then h.PlatformStand=false end
-	end
+local function attachHighlight(plr)
+    if plr == lp then return end
+    local function onChar(char)
+        if highlights[plr] and highlights[plr].Parent then highlights[plr]:Destroy() end
+        local h = Instance.new("Highlight"); h.Name="DebugHighlight"; h.FillColor=Color3.fromRGB(220,40,40); h.OutlineColor=Color3.fromRGB(255,255,255); h.FillTransparency=0.25; h.OutlineTransparency=0; h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop; h.Parent=char
+        highlights[plr] = h; h.Enabled = showHighlight
+    end
+    plr.CharacterAdded:Connect(onChar); if plr.Character then onChar(plr.Character) end
 end
+for _,p in ipairs(Players:GetPlayers()) do if p ~= lp then attachNameTag(p); attachHighlight(p) end end
+Players.PlayerAdded:Connect(function(p) attachNameTag(p); attachHighlight(p) end)
+Players.PlayerRemoving:Connect(function(p) if nameTags[p] then nameTags[p]:Destroy(); nameTags[p]=nil end; if highlights[p] then highlights[p]:Destroy(); highlights[p]=nil end end)
 
-tFly:GetAttributeChangedSignal("Value"):Connect(function() setFly(tFly:GetAttribute("Value")) end)
+local function makeBtnVisual(parent, text, y) return makeBtn(parent, text, y) end
+local function setBtnState2(b, label, on) setBtnState(b, label, on) end
 
----------------------------------------------------------------------
--- Aimbot (seguro a dianas) + FOV y color
----------------------------------------------------------------------
-local cAim, aim = card("Aimbot (práctica)", 280) cAim.Parent = TabAim
-local tAim = toggleRow("Aimbot ON/OFF", false) tAim.Parent = aim
-local intensity = sliderRow("Intensidad", 1, 100, 50) intensity.Parent = aim
-local tFOV = toggleRow("FOV Círculo", true) tFOV.Parent = aim
-local sFOV = sliderRow("Tamaño FOV", 30, 500, 180) sFOV.Parent = aim
+local btnNames  = makeBtnVisual(pageVisual, "Nombres: OFF",         10)
+local btnESP    = makeBtnVisual(pageVisual, "Resaltar (rojo): OFF", 56)
+btnNames.MouseButton1Click:Connect(function()
+    showNames = not showNames
+    for _,bb in pairs(nameTags) do if bb and bb.Parent then bb.Enabled = showNames end end
+    setBtnState2(btnNames, "Nombres: ", showNames)
+end)
+btnESP.MouseButton1Click:Connect(function()
+    showHighlight = not showHighlight
+    for _,h in pairs(highlights) do if h and h.Parent then h.Enabled = showHighlight end end
+    setBtnState2(btnESP, "Resaltar (rojo): ", showHighlight)
+end)
+setBtnState2(btnNames, "Nombres: ", showNames)
+setBtnState2(btnESP,   "Resaltar (rojo): ", showHighlight)
 
-local cColor, col = card("Color FOV (RGB)", 180) cColor.Parent = TabAim
-local rS = sliderRow("R", 0,255, 255) rS.Parent = col
-local gS = sliderRow("G", 0,255, 70)  gS.Parent = col
-local bS = sliderRow("B", 0,255, 70)  bS.Parent = col
+-------------------------
+--      CRÉDITOS       --
+-------------------------
+local cred1 = Instance.new("TextLabel")
+cred1.BackgroundTransparency = 1
+cred1.Size = UDim2.new(1, -20, 0, 24)
+cred1.Position = UDim2.new(0, 10, 0, 10)
+cred1.Font = Enum.Font.GothamBold
+cred1.TextSize = 16
+cred1.TextColor3 = Color3.fromRGB(235,235,255)
+cred1.TextXAlignment = Enum.TextXAlignment.Left
+cred1.Text = "creador: pedri.exe / Nakamy"
+cred1.Parent = pageCred
 
--- Estado de la tecla C (toggle, no mantener)
-local AimHolding = false
-UserInputService.InputBegan:Connect(function(input, g)
-	if g then return end
-	if input.KeyCode == Enum.KeyCode.C then
-		AimHolding = not AimHolding
-	end
+local cred2 = Instance.new("TextLabel")
+cred2.BackgroundTransparency = 1
+cred2.Size = UDim2.new(1, -20, 0, 22)
+cred2.Position = UDim2.new(0, 10, 0, 40)
+cred2.Font = Enum.Font.Gotham
+cred2.TextSize = 14
+cred2.TextColor3 = Color3.fromRGB(220,220,240)
+cred2.TextXAlignment = Enum.TextXAlignment.Left
+cred2.Text = "versión: V6"
+cred2.Parent = pageCred
+
+local credBtn = Instance.new("TextButton")
+credBtn.Size = UDim2.new(1, -20, 0, 36)
+credBtn.Position = UDim2.new(0, 10, 0, 72)
+credBtn.BackgroundColor3 = Color3.fromRGB(28,28,40)
+credBtn.TextColor3 = Color3.fromRGB(255,255,255)
+credBtn.Font = Enum.Font.GothamBold
+credBtn.TextSize = 14
+credBtn.Text = "Discord: "..DISCORD_LINK.."  (clic para copiar)"
+credBtn.Parent = pageCred
+Instance.new("UICorner", credBtn).CornerRadius = UDim.new(0, 8)
+credBtn.MouseButton1Click:Connect(function()
+    if setclipboard then setclipboard(DISCORD_LINK) end
+    credBtn.Text = "¡Copiado! "..DISCORD_LINK
 end)
 
--- FOV circle
-local FOVCircle = Instance.new("Frame")
-FOVCircle.AnchorPoint = Vector2.new(0.5,0.5)
-FOVCircle.Size = UDim2.fromOffset(sFOV:GetAttribute("Value")*2, sFOV:GetAttribute("Value")*2)
-FOVCircle.Position = UDim2.fromScale(0.5, 0.5)
-FOVCircle.BackgroundTransparency = 1
-FOVCircle.Visible = true
-FOVCircle.Parent = Gui
-local FS = Instance.new("UIStroke") FS.Thickness=2 FS.Parent=FOVCircle
-local corner = Instance.new("UICorner") corner.CornerRadius=UDim.new(1,0) corner.Parent=FOVCircle
+-------------------------
+--        OTROS        --
+-------------------------
+-- Invisible (local)
+local invisOn = false
+local btnInvis = makeBtn(pageOtros, "Invisible: OFF", 10)
 
-RunService.RenderStepped:Connect(function()
-	FOVCircle.Visible = tFOV:GetAttribute("Value") and Root.Visible
-	FOVCircle.Size = UDim2.fromOffset(sFOV:GetAttribute("Value")*2, sFOV:GetAttribute("Value")*2)
-	FS.Color = Color3.fromRGB(rS:GetAttribute("Value"), gS:GetAttribute("Value"), bS:GetAttribute("Value"))
-end)
-
-local function getTargets()
-	local arr = {}
-	for _,p in ipairs(CollectionService:GetTagged("AimTarget")) do table.insert(arr,p) end
-	local folder = workspace:FindFirstChild("AimTargets")
-	if folder then for _,p in ipairs(folder:GetDescendants()) do if p:IsA("BasePart") then table.insert(arr,p) end end end
-	return arr
-end
-
-RunService.RenderStepped:Connect(function()
-	if not tAim:GetAttribute("Value") or not AimHolding then return end
-	if Camera.CameraType == Enum.CameraType.Scriptable then return end
-	local targets = getTargets() if #targets==0 then return end
-	local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-	local best; local bestDist=math.huge
-	for _,part in ipairs(targets) do
-		local scr,on = w2s(part.Position)
-		if on then
-			local d = (scr-center).Magnitude
-			if (not tFOV:GetAttribute("Value")) or d <= sFOV:GetAttribute("Value") then
-				if d < bestDist then best=part bestDist=d end
-			end
-		end
-	end
-	if best then
-		local t = clamp(intensity:GetAttribute("Value")/100, 0.02, 0.95)
-		local current = Camera.CFrame
-		local desired = CFrame.new(current.Position, best.Position)
-		Camera.CFrame = current:Lerp(desired, t)
-	end
-end)
-
----------------------------------------------------------------------
--- Visual (resalta dianas / NPCs) + nombre y distancia
----------------------------------------------------------------------
-local cVis, vbody = card("Visual", 160) cVis.Parent = TabVis
-local tVis = toggleRow("Visual ON/OFF (maestro)", false) tVis.Parent = vbody
-
-local function ensureESPFor(part)
-	local model = part:IsA("Model") and part or part:FindFirstAncestorOfClass("Model") or part
-	if not model then return end
-	local h = model:FindFirstChildOfClass("Highlight")
-	if not h then h = Instance.new("Highlight") h.Parent = model end
-	h.FillTransparency = 1; h.OutlineTransparency = 0; h.OutlineColor = Color3.fromRGB(255,60,60)
-	local head = model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart")
-	if head and not head:FindFirstChild("FL_NameTag") then
-		local bg = Instance.new("BillboardGui") bg.Name="FL_NameTag" bg.AlwaysOnTop=true bg.Size=UDim2.new(0,200,0,24) bg.StudsOffset=Vector3.new(0,3,0) bg.Parent=head
-		local tl = Instance.new("TextLabel") tl.BackgroundTransparency=1 tl.Size=UDim2.new(1,0,1,0) tl.Font=Enum.Font.GothamBold tl.TextSize=14 tl.TextStrokeTransparency=0.2 tl.TextColor3=Color3.fromRGB(255,80,80) tl.Text = model.Name tl.Parent=bg
-	end
+local function setCharacterLocalTransparency(char, val)
+    for _,d in ipairs(char:GetDescendants()) do
+        if d:IsA("BasePart") then
+            d.LocalTransparencyModifier = val
+        elseif d:IsA("Decal") then
+            d.Transparency = val -- Decal es replicado; si no quieres replicar, comenta esta línea
+        end
+    end
 end
 
-local function updateTag(part)
-	local model = part:IsA("Model") and part or part:FindFirstAncestorOfClass("Model") or part
-	local head = model and (model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart"))
-	local myRoot = getRoot(getChar(LP))
-	if not head or not myRoot then return end
-	local bg = head:FindFirstChild("FL_NameTag") if not bg then return end
-	local tl = bg:FindFirstChildOfClass("TextLabel") if not tl then return end
-	local dist = (head.Position - myRoot.Position).Magnitude
-	tl.Text = string.format("%s  |  %dm", model.Name, math.floor(dist+0.5))
+local function enableInvisible()
+    local char = lp.Character
+    if not char then return end
+    setCharacterLocalTransparency(char, 1)
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then hum.NameDisplayDistance = 0 end
+end
+local function disableInvisible()
+    local char = lp.Character
+    if not char then return end
+    setCharacterLocalTransparency(char, 0)
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then hum.NameDisplayDistance = 100 end
+end
+btnInvis.MouseButton1Click:Connect(function()
+    invisOn = not invisOn
+    if invisOn then enableInvisible() else disableInvisible() end
+    setBtnState(btnInvis, "Invisible: ", invisOn)
+end)
+setBtnState(btnInvis, "Invisible: ", invisOn)
+
+-- Freecam / Foto (cámara libre, personaje quieto)
+local freecamOn = false
+local btnFree = makeBtn(pageOtros, "Foto (Freecam): OFF", 56)
+
+local prevCamType, prevCamSubj, prevCamCF
+local savedAnchor = nil
+local fcConn, mouseConn
+local yaw, pitch = 0, 0
+local fcSpeed = FC_SPEED_DEFAULT
+
+local function setMouseLock(lock)
+    if lock then
+        UIS.MouseIconEnabled = false
+        UIS.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
+    else
+        UIS.MouseBehavior = Enum.MouseBehavior.Default
+        UIS.MouseIconEnabled = true
+    end
 end
 
-RunService.RenderStepped:Connect(function()
-	if not tVis:GetAttribute("Value") then return end
-	local parts = {}
-	for _,p in ipairs(CollectionService:GetTagged("AimTarget")) do table.insert(parts,p) end
-	for _,p in ipairs(CollectionService:GetTagged("EnemyNPC")) do table.insert(parts,p) end
-	local folder = workspace:FindFirstChild("AimTargets") if folder then for _,p in ipairs(folder:GetDescendants()) do if p:IsA("BasePart") then table.insert(parts,p) end end end
-	for _,p in ipairs(parts) do ensureESPFor(p); updateTag(p) end
-end)
+local function fcStart()
+    if freecamOn then return end
+    local cam = Workspace.CurrentCamera
+    local hum, hrp = getHum()
+    if not cam or not (hum and hrp) then return end
+    freecamOn = true
 
----------------------------------------------------------------------
--- Otros: Invisible (local) + Freecam
----------------------------------------------------------------------
-local cOtr, obody = card("Otros", 150) cOtr.Parent = TabOtr
-local tInv = toggleRow("Invisible (local)", false) tInv.Parent = obody
-local tFree = toggleRow("Freecam / Foto", false) tFree.Parent = obody
-local spd = sliderRow("Velocidad Freecam", 8, 240, 60) spd.Parent = obody
+    -- Guardar estado
+    prevCamType, prevCamSubj, prevCamCF = cam.CameraType, cam.CameraSubject, cam.CFrame
 
-local freeConn; local md = Vector2.new()
-UserInputService.InputChanged:Connect(function(i)
-	if tFree:GetAttribute("Value") and i.UserInputType==Enum.UserInputType.MouseMovement then md = Vector2.new(i.Delta.X, i.Delta.Y) end
-end)
+    -- Anclar personaje (quieto)
+    savedAnchor = hrp.Anchored
+    hrp.Anchored = true
+    hum.AutoRotate = false
+    hum.PlatformStand = true
 
-tInv:GetAttributeChangedSignal("Value"):Connect(function()
-	local ch=LP.Character if not ch then return end
-	for _,p in ipairs(ch:GetDescendants()) do if p:IsA("BasePart") then p.LocalTransparencyModifier = tInv:GetAttribute("Value") and 1 or 0 end end
-end)
+    -- Iniciar cámara scriptable
+    cam.CameraType = Enum.CameraType.Scriptable
+    cam.CFrame = cam.CFrame
+    setMouseLock(true)
 
-local function setFree(on)
-	local ch = LP.Character or LP.CharacterAdded:Wait()
-	local root = getRoot(ch)
-	local h = hum(ch)
-	if on then
-		if root then root.Anchored=true end
-		if h then h.AutoRotate=false end
-		Camera.CameraType = Enum.CameraType.Scriptable
-		local pos = (root and root.Position) or Camera.CFrame.Position
-		local yaw,pitch = 0,0
-		if freeConn then freeConn:Disconnect() end
-		freeConn = RunService.RenderStepped:Connect(function(dt)
-			local move = Vector3.new()
-			if UserInputService:IsKeyDown(Enum.KeyCode.W) then move+=Vector3.new(0,0,-1) end
-			if UserInputService:IsKeyDown(Enum.KeyCode.S) then move+=Vector3.new(0,0,1) end
-			if UserInputService:IsKeyDown(Enum.KeyCode.A) then move+=Vector3.new(-1,0,0) end
-			if UserInputService:IsKeyDown(Enum.KeyCode.D) then move+=Vector3.new(1,0,0) end
-			if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move+=Vector3.new(0,1,0) end
-			if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then move+=Vector3.new(0,-1,0) end
-			local sp = spd:GetAttribute("Value") * dt * 6
-			pos += (Camera.CFrame:VectorToWorldSpace(move)) * sp
-			yaw -= md.X * 0.0025
-			pitch = clamp(pitch - md.Y * 0.0025, -1.3, 1.3)
-			Camera.CFrame = CFrame.new(pos) * CFrame.Angles(0,yaw,0) * CFrame.Angles(pitch,0,0)
-			md = Vector2.new()
-		end)
-	else
-		if freeConn then freeConn:Disconnect() freeConn=nil end
-		Camera.CameraType = Enum.CameraType.Custom
-		if root then root.Anchored=false end
-		if h then h.AutoRotate=true end
-	end
+    yaw = 0; pitch = 0
+    mouseConn = UIS.InputChanged:Connect(function(inp, gpe)
+        if gpe then return end
+        if inp.UserInputType == Enum.UserInputType.MouseMovement and freecamOn then
+            yaw   = yaw   - inp.Delta.X * FC_SENS.X
+            pitch = math.clamp(pitch - inp.Delta.Y * FC_SENS.Y, -1.3, 1.3) -- ~±75°
+        end
+    end)
+
+    fcConn = RS.RenderStepped:Connect(function(dt)
+        if not freecamOn then return end
+        local cf = cam.CFrame
+        -- Construir rotación desde yaw/pitch
+        local rot = CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, 0)
+        local forward = rot.LookVector
+        local right   = rot.RightVector
+        local up      = rot.UpVector
+
+        local move = Vector3.zero
+        if UIS:IsKeyDown(Enum.KeyCode.W) then move += forward end
+        if UIS:IsKeyDown(Enum.KeyCode.S) then move -= forward end
+        if UIS:IsKeyDown(Enum.KeyCode.D) then move += right end
+        if UIS:IsKeyDown(Enum.KeyCode.A) then move -= right end
+        if UIS:IsKeyDown(Enum.KeyCode.Space) then move += up end
+        if UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl) then move -= up end
+
+        if move.Magnitude > 0 then move = move.Unit * (fcSpeed * dt) end
+        cam.CFrame = CFrame.new(cam.CFrame.Position + move) * rot
+    end)
 end
 
-tFree:GetAttributeChangedSignal("Value"):Connect(function() setFree(tFree:GetAttribute("Value")) end)
+local function fcStop()
+    if not freecamOn then return end
+    freecamOn = false
+    local cam = Workspace.CurrentCamera
+    if fcConn then fcConn:Disconnect(); fcConn=nil end
+    if mouseConn then mouseConn:Disconnect(); mouseConn=nil end
+    setMouseLock(false)
 
----------------------------------------------------------------------
--- Créditos
----------------------------------------------------------------------
-local cCre, cr = card("Créditos", 130) cCre.Parent = TabCre
-local l1 = Instance.new("TextLabel") l1.BackgroundTransparency=1 l1.Size=UDim2.new(1,0,0,22) l1.Font=Enum.Font.Gotham l1.TextSize=16 l1.TextColor3=Colors.text l1.TextXAlignment=Enum.TextXAlignment.Left l1.Text = "creador: by pedri.exe" l1.Parent = cr
-local copy = Instance.new("TextButton") copy.Size=UDim2.new(0,180,0,28) copy.Text="Copiar Discord" copy.Font=Enum.Font.GothamBold copy.TextSize=14 copy.BackgroundColor3=Colors.accent copy.TextColor3=Colors.bg copy.AutoButtonColor=false copy.Parent=cr
-local cs = Instance.new("UIStroke") cs.Color=Colors.accent cs.Thickness=2 cs.Parent=copy
-copy.MouseButton1Click:Connect(function() safeSetClipboard("https://discord.gg/FDjHggJF") end)
-local l3 = Instance.new("TextLabel") l3.BackgroundTransparency=1 l3.Size=UDim2.new(1,0,0,22) l3.Font=Enum.Font.Gotham l3.TextSize=16 l3.TextColor3=Colors.text l3.TextXAlignment=Enum.TextXAlignment.Left l3.Text = "versión: 1.30.130" l3.Parent = cr
+    -- Restaurar personaje y cámara
+    local hum, hrp = getHum()
+    if hrp and savedAnchor ~= nil then hrp.Anchored = savedAnchor end
+    if hum then hum.AutoRotate = true; hum.PlatformStand = false end
+    if cam then
+        cam.CameraType = prevCamType or Enum.CameraType.Custom
+        cam.CameraSubject = prevCamSubj or (hum or hrp)
+        cam.CFrame = prevCamCF or (hrp and hrp.CFrame or cam.CFrame)
+    end
+end
 
----------------------------------------------------------------------
--- Toggle global L y activación tras login
----------------------------------------------------------------------
-UserInputService.InputBegan:Connect(function(i,g) if g then return end if i.KeyCode==Enum.KeyCode.L then Root.Visible = not Root.Visible end end)
+btnFree.MouseButton1Click:Connect(function()
+    if freecamOn then fcStop() else fcStart() end
+    setBtnState(btnFree, "Foto (Freecam): ", freecamOn)
+end)
+setBtnState(btnFree, "Foto (Freecam): ", freecamOn)
 
-spawn(function()
-	while true do
-		if authed and not Root.Visible then Root.Visible=true for i,pg in ipairs(pages) do pg.Visible = (i==1) end break end
-		RunService.Heartbeat:Wait()
-	end
+-- Si respawneas con Freecam activo, lo apagamos para evitar cámara huérfana
+lp.CharacterAdded:Connect(function()
+    if freecamOn then fcStop() end
+    if invisOn then task.wait(0.2); enableInvisible() end
 end)
 
--- Fin
+-------------------------
+--   TECLA L (toggle)  --
+-------------------------
+local function openMain()
+    if main.Visible then return end
+    main.Visible = true
+    main.Size = UDim2.fromOffset(560, 0)
+    TS:Create(main, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {Size = UDim2.fromOffset(560, 430)}):Play()
+end
+local function closeMain()
+    if not main.Visible then return end
+    TS:Create(main, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {Size = UDim2.fromOffset(560, 0)}):Play()
+    task.delay(0.25, function() main.Visible = false end)
+end
+UIS.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.L and main.Visible then closeMain()
+    elseif input.KeyCode == Enum.KeyCode.L and not main.Visible then openMain() end
+end)
+
+-------------------------
+--   ACCIÓN DEL LOGIN  --
+-------------------------
+loginBtn.MouseButton1Click:Connect(function()
+    if keyBox.Text == ACCESS_KEY then
+        clickableBanner("bienvenido si nesesitas ayuda ven al discord "..DISCORD_LINK, DISCORD_LINK, 9)
+        TS:Create(loginFrame, TweenInfo.new(0.2), {Size = UDim2.fromOffset(360, 0)}):Play()
+        task.delay(0.2, function() loginFrame.Visible = false; openMain() end)
+    else
+        toast("Key incorrecta.", 5)
+        loginBtn.BackgroundColor3 = Color3.fromRGB(150,50,50)
+        task.delay(0.4, function() loginBtn.BackgroundColor3 = Color3.fromRGB(45,130,90) end)
+    end
+end)
