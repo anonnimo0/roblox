@@ -37,7 +37,7 @@ dragTitle.Font = Enum.Font.GothamBold
 dragTitle.TextSize = 18
 dragTitle.TextXAlignment = Enum.TextXAlignment.Left
 dragTitle.TextColor3 = Color3.fromRGB(230,230,255)
-dragTitle.Text = "CMD SHOP Panel"
+dragTitle.Text = "Menu Admin"
 dragTitle.Parent = topDrag
 
 -- Drag logic
@@ -134,7 +134,7 @@ pages.Name = "Pages"
 pages.Parent = right
 
 --------------------------------------------------
--- PAGE 1: MYSELF
+-- PAGE 1: MYSELF (MENU ADMIN)
 --------------------------------------------------
 local page1 = Instance.new("Frame")
 page1.Size = UDim2.new(1, -20, 1, -20)
@@ -150,44 +150,122 @@ myselfTitle.Font = Enum.Font.GothamBold
 myselfTitle.TextSize = 20
 myselfTitle.TextXAlignment = Enum.TextXAlignment.Left
 myselfTitle.TextColor3 = Color3.fromRGB(230,230,250)
-myselfTitle.Text = "MYSELF"
+myselfTitle.Text = "MENU ADMIN"
 myselfTitle.Parent = page1
 
-local btnVer = Instance.new("TextButton")
-btnVer.Size = UDim2.new(0, 120, 0, 32)
-btnVer.Position = UDim2.new(0, 0, 0, 40)
-btnVer.BackgroundColor3 = Color3.fromRGB(30,30,50)
-btnVer.BorderSizePixel = 0
-btnVer.Font = Enum.Font.Gotham
-btnVer.TextSize = 14
-btnVer.Text = "Ver"
-btnVer.TextColor3 = Color3.fromRGB(240,240,255)
-btnVer.Parent = page1
-Instance.new("UICorner", btnVer).CornerRadius = UDim.new(0, 8)
+-- Contenedor de opciones (switches)
+local optionsHolder = Instance.new("Frame")
+optionsHolder.BackgroundTransparency = 1
+optionsHolder.Size = UDim2.new(1, 0, 1, -40)
+optionsHolder.Position = UDim2.new(0, 0, 0, 40)
+optionsHolder.Parent = page1
 
--- Contenedor simple de ejemplo al pulsar "Ver" (puedes usarlo para info de tu jugador, etc.)
-local myselfInfo = Instance.new("TextLabel")
-myselfInfo.BackgroundTransparency = 1
-myselfInfo.Size = UDim2.new(1, 0, 0, 24)
-myselfInfo.Position = UDim2.new(0, 0, 0, 80)
-myselfInfo.Font = Enum.Font.Gotham
-myselfInfo.TextSize = 14
-myselfInfo.TextXAlignment = Enum.TextXAlignment.Left
-myselfInfo.TextColor3 = Color3.fromRGB(230,230,255)
-myselfInfo.Text = ""
-myselfInfo.Parent = page1
+local optionsLayout = Instance.new("UIListLayout")
+optionsLayout.Parent = optionsHolder
+optionsLayout.FillDirection = Enum.FillDirection.Vertical
+optionsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+optionsLayout.Padding = UDim.new(0, 8)
 
-btnVer.MouseButton1Click:Connect(function()
-    print("Botón 'Ver' pulsado (MYSELF).")
-    local device
-    if UIS.TouchEnabled and not UIS.KeyboardEnabled then
-        device = "Mobile"
-    elseif UIS.GamepadEnabled and not UIS.KeyboardEnabled then
-        device = "Console"
+-- Función para crear un toggle
+local function createToggleRow(text)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -10, 0, 32)
+    row.BackgroundColor3 = Color3.fromRGB(20,20,32)
+    row.BorderSizePixel = 0
+    row.Parent = optionsHolder
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.new(0.7, -10, 1, 0)
+    label.Position = UDim2.new(0, 8, 0, 0)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 14
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextColor3 = Color3.fromRGB(230,230,255)
+    label.Text = text
+    label.Parent = row
+
+    local toggle = Instance.new("TextButton")
+    toggle.Size = UDim2.new(0, 80, 0, 24)
+    toggle.Position = UDim2.new(1, -90, 0.5, -12)
+    toggle.BackgroundColor3 = Color3.fromRGB(80, 20, 20)
+    toggle.BorderSizePixel = 0
+    toggle.Font = Enum.Font.GothamBold
+    toggle.TextSize = 14
+    toggle.TextColor3 = Color3.fromRGB(240,240,255)
+    toggle.Text = "OFF"
+    toggle.AutoButtonColor = true
+    toggle.Parent = row
+    Instance.new("UICorner", toggle).CornerRadius = UDim.new(0, 12)
+
+    return toggle
+end
+
+-- Estados
+local option1Enabled = false -- ver nombre de users
+local option2Enabled = false -- marcar a jugadores en rojo
+local allEnabled = false     -- activar todo/apagar
+
+-- Función para actualizar visualmente un toggle
+local function setToggleVisual(btn, state)
+    if state then
+        btn.Text = "ON"
+        btn.BackgroundColor3 = Color3.fromRGB(30,120,40)
     else
-        device = "PC"
+        btn.Text = "OFF"
+        btn.BackgroundColor3 = Color3.fromRGB(80,20,20)
     end
-    myselfInfo.Text = "You are playing on: " .. device
+end
+
+-- Crear filas
+local toggle1 = createToggleRow("1) Ver nombre de users")
+local toggle2 = createToggleRow("2) Marcar a jugadores en rojo")
+local toggleAll = createToggleRow("3) Activar todo / Apagar")
+
+-- LÓGICA QUE LUEGO PUEDES EDITAR PARA HACER COSAS REALES
+local function OnOption1Changed(state)
+    option1Enabled = state
+    print("Opción 1 (Ver nombre de users) =", state)
+    -- Aquí puedes activar ESP de nombres, por ejemplo
+end
+
+local function OnOption2Changed(state)
+    option2Enabled = state
+    print("Opción 2 (Marcar a jugadores en rojo) =", state)
+    -- Aquí puedes marcar jugadores en rojo, highlight, etc.
+end
+
+local function OnAllChanged(state)
+    allEnabled = state
+    print("Opción 3 (Activar todo/Apagar) =", state)
+    -- Sincroniza con las otras 2 opciones
+    option1Enabled = state
+    option2Enabled = state
+    setToggleVisual(toggle1, state)
+    setToggleVisual(toggle2, state)
+
+    OnOption1Changed(state)
+    OnOption2Changed(state)
+end
+
+-- Conexiones de los botones
+toggle1.MouseButton1Click:Connect(function()
+    option1Enabled = not option1Enabled
+    setToggleVisual(toggle1, option1Enabled)
+    OnOption1Changed(option1Enabled)
+end)
+
+toggle2.MouseButton1Click:Connect(function()
+    option2Enabled = not option2Enabled
+    setToggleVisual(toggle2, option2Enabled)
+    OnOption2Changed(option2Enabled)
+end)
+
+toggleAll.MouseButton1Click:Connect(function()
+    allEnabled = not allEnabled
+    setToggleVisual(toggleAll, allEnabled)
+    OnAllChanged(allEnabled)
 end)
 
 --------------------------------------------------
@@ -240,14 +318,12 @@ listLayout.Padding = UDim.new(0, 4)
 listLayout.FillDirection = Enum.FillDirection.Vertical
 listLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
--- Ajustar CanvasSize automáticamente
 listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
     playersList.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
 end)
 
--- Función para detectar dispositivo (solo exacto para tú mismo)
+-- Función para detectar dispositivo
 local function GetDeviceForPlayer(plr)
-    -- Si el jugador es el LocalPlayer, detectamos por UserInputService
     if plr == lp then
         if UIS.TouchEnabled and not UIS.KeyboardEnabled then
             return "Mobile"
@@ -257,15 +333,12 @@ local function GetDeviceForPlayer(plr)
             return "PC"
         end
     end
-    
-    -- Si en el server les has puesto un StringValue llamado "DeviceType"
-    -- debajo del Player, lo usamos:
+
     local deviceTag = plr:FindFirstChild("DeviceType")
     if deviceTag and deviceTag:IsA("StringValue") then
         return deviceTag.Value
     end
 
-    -- Si no sabemos, lo marcamos como Unknown
     return "Unknown"
 end
 
@@ -316,12 +389,10 @@ local function RefreshPlayerList()
     end
 end
 
--- Botón manual de refresco
 refreshBtn.MouseButton1Click:Connect(function()
     RefreshPlayerList()
 end)
 
--- Actualización automática al entrar / salir players
 Players.PlayerAdded:Connect(function(plr)
     CreatePlayerRow(plr)
 end)
@@ -366,7 +437,7 @@ local function showPage(which)
 end
 
 t1.MouseButton1Click:Connect(function() showPage(1) end)
-t2.MouseButton1Click:Connect(function() 
+t2.MouseButton1Click:Connect(function()
     showPage(2)
     RefreshPlayerList()
 end)
