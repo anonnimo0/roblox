@@ -1,4 +1,4 @@
---// Foxxy's Leaks — Admin/Debug UI (para TU experiencia)
+--// CMD SHOP — Admin/Debug UI (para TU experiencia)
 --// Login con key -> 4 menús: Movimiento (velocidad, noclip, salto, fly + slider),
 --//                      Visual (nombres + highlight),
 --//                      Créditos,
@@ -68,7 +68,7 @@ local function isAllowedUser()
     return false
 end
 if not isAllowedPlace() or not isAllowedUser() then
-    warn("[FoxxysLeaks] No autorizado en este lugar/usuario. Configura ALLOWED_* en el script.")
+    warn("[CMD SHOP] No autorizado en este lugar/usuario. Configura ALLOWED_* en el script.")
     return
 end
 
@@ -76,7 +76,7 @@ end
 --       GUI BASE      --
 -------------------------
 local gui = Instance.new("ScreenGui")
-gui.Name = "FoxyLeaksUI"
+gui.Name = "CMDShopUI"
 gui.ResetOnSpawn = false
 pcall(function() gui.Parent = game.CoreGui end)
 if not gui.Parent then gui.Parent = lp:WaitForChild("PlayerGui") end
@@ -97,7 +97,7 @@ title.BackgroundTransparency = 1
 title.Font = Enum.Font.GothamBold
 title.TextSize = 16
 title.TextColor3 = Color3.fromRGB(235,235,255)
-title.Text = "Foxxy's Leaks — Login"
+title.Text = "CMD SHOP — Login"
 title.Size = UDim2.new(1, -20, 0, 32)
 title.Position = UDim2.new(0, 10, 0, 10)
 title.Parent = loginFrame
@@ -139,7 +139,7 @@ info.Parent = loginFrame
 local function toast(txt, dur)
     pcall(function()
         SG:SetCore("SendNotification", {
-            Title = "Foxxy's Leaks";
+            Title = "CMD SHOP";
             Text = txt;
             Duration = dur or 5;
         })
@@ -257,7 +257,7 @@ titleMain.Font = Enum.Font.GothamBold
 titleMain.TextSize = 16
 titleMain.TextXAlignment = Enum.TextXAlignment.Left
 titleMain.TextColor3 = Color3.fromRGB(220,220,255)
-titleMain.Text = "Foxxy's Leaks  —  [L para ocultar/mostrar]"
+titleMain.Text = "CMD SHOP  —  [L para ocultar/mostrar]"
 titleMain.ZIndex = 4
 titleMain.Parent = topBar
 
@@ -815,7 +815,7 @@ cred1.Font = Enum.Font.GothamBold
 cred1.TextSize = 16
 cred1.TextColor3 = Color3.fromRGB(235,235,255)
 cred1.TextXAlignment = Enum.TextXAlignment.Left
-cred1.Text = "creador: pedri.exe / Nakamy"
+cred1.Text = "creador: pedri.exe / CMD SHOP"
 cred1.Parent = pageCred
 
 local cred2 = Instance.new("TextLabel")
