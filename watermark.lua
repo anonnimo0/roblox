@@ -114,7 +114,7 @@ local function createTab(text)
 end
 
 local t1 = createTab("MYSELF")
-local t2 = createTab("Sección 2")
+local t2 = createTab("PLAYER LIST")
 local t3 = createTab("Sección 3")
 
 --=============================
@@ -165,14 +165,33 @@ btnVer.TextColor3 = Color3.fromRGB(240,240,255)
 btnVer.Parent = page1
 Instance.new("UICorner", btnVer).CornerRadius = UDim.new(0, 8)
 
+-- Contenedor simple de ejemplo al pulsar "Ver" (puedes usarlo para info de tu jugador, etc.)
+local myselfInfo = Instance.new("TextLabel")
+myselfInfo.BackgroundTransparency = 1
+myselfInfo.Size = UDim2.new(1, 0, 0, 24)
+myselfInfo.Position = UDim2.new(0, 0, 0, 80)
+myselfInfo.Font = Enum.Font.Gotham
+myselfInfo.TextSize = 14
+myselfInfo.TextXAlignment = Enum.TextXAlignment.Left
+myselfInfo.TextColor3 = Color3.fromRGB(230,230,255)
+myselfInfo.Text = ""
+myselfInfo.Parent = page1
+
 btnVer.MouseButton1Click:Connect(function()
-    -- Aquí tú añades la lógica que quieras hacer al pulsar "Ver"
-    -- (por ejemplo, algo para VIP, debug, etc.)
     print("Botón 'Ver' pulsado (MYSELF).")
+    local device
+    if UIS.TouchEnabled and not UIS.KeyboardEnabled then
+        device = "Mobile"
+    elseif UIS.GamepadEnabled and not UIS.KeyboardEnabled then
+        device = "Console"
+    else
+        device = "PC"
+    end
+    myselfInfo.Text = "You are playing on: " .. device
 end)
 
 --------------------------------------------------
--- PAGE 2: Sección 2
+-- PAGE 2: PLAYER LIST (Admin)
 --------------------------------------------------
 local page2 = Instance.new("Frame")
 page2.Size = UDim2.new(1, -20, 1, -20)
@@ -181,17 +200,138 @@ page2.BackgroundTransparency = 1
 page2.Visible = false
 page2.Parent = pages
 
-local page2Label = Instance.new("TextLabel")
-page2Label.BackgroundTransparency = 1
-page2Label.Size = UDim2.new(1, 0, 1, 0)
-page2Label.Font = Enum.Font.Gotham
-page2Label.TextSize = 16
-page2Label.TextColor3 = Color3.fromRGB(220,220,240)
-page2Label.TextWrapped = true
-page2Label.TextXAlignment = Enum.TextXAlignment.Left
-page2Label.TextYAlignment = Enum.TextYAlignment.Top
-page2Label.Text = "Contenido de Sección 2."
-page2Label.Parent = page2
+local page2Title = Instance.new("TextLabel")
+page2Title.BackgroundTransparency = 1
+page2Title.Size = UDim2.new(1, 0, 0, 28)
+page2Title.Position = UDim2.new(0, 0, 0, 0)
+page2Title.Font = Enum.Font.GothamBold
+page2Title.TextSize = 20
+page2Title.TextXAlignment = Enum.TextXAlignment.Left
+page2Title.TextColor3 = Color3.fromRGB(230,230,250)
+page2Title.Text = "PLAYER LIST"
+page2Title.Parent = page2
+
+local refreshBtn = Instance.new("TextButton")
+refreshBtn.Size = UDim2.new(0, 120, 0, 28)
+refreshBtn.Position = UDim2.new(1, -130, 0, 2)
+refreshBtn.BackgroundColor3 = Color3.fromRGB(30,30,50)
+refreshBtn.BorderSizePixel = 0
+refreshBtn.Font = Enum.Font.Gotham
+refreshBtn.TextSize = 13
+refreshBtn.Text = "Refresh"
+refreshBtn.TextColor3 = Color3.fromRGB(240,240,255)
+refreshBtn.Parent = page2
+Instance.new("UICorner", refreshBtn).CornerRadius = UDim.new(0, 8)
+
+-- ScrollingFrame para la lista de jugadores
+local playersList = Instance.new("ScrollingFrame")
+playersList.Size = UDim2.new(1, 0, 1, -40)
+playersList.Position = UDim2.new(0, 0, 0, 36)
+playersList.CanvasSize = UDim2.new(0, 0, 0, 0)
+playersList.ScrollBarThickness = 4
+playersList.BackgroundColor3 = Color3.fromRGB(15,15,24)
+playersList.BorderSizePixel = 0
+playersList.Parent = page2
+Instance.new("UICorner", playersList).CornerRadius = UDim.new(0, 8)
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Parent = playersList
+listLayout.Padding = UDim.new(0, 4)
+listLayout.FillDirection = Enum.FillDirection.Vertical
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+-- Ajustar CanvasSize automáticamente
+listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    playersList.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
+end)
+
+-- Función para detectar dispositivo (solo exacto para tú mismo)
+local function GetDeviceForPlayer(plr)
+    -- Si el jugador es el LocalPlayer, detectamos por UserInputService
+    if plr == lp then
+        if UIS.TouchEnabled and not UIS.KeyboardEnabled then
+            return "Mobile"
+        elseif UIS.GamepadEnabled and not UIS.KeyboardEnabled then
+            return "Console"
+        else
+            return "PC"
+        end
+    end
+    
+    -- Si en el server les has puesto un StringValue llamado "DeviceType"
+    -- debajo del Player, lo usamos:
+    local deviceTag = plr:FindFirstChild("DeviceType")
+    if deviceTag and deviceTag:IsA("StringValue") then
+        return deviceTag.Value
+    end
+
+    -- Si no sabemos, lo marcamos como Unknown
+    return "Unknown"
+end
+
+local function CreatePlayerRow(plr)
+    local row = Instance.new("Frame")
+    row.Name = plr.Name
+    row.Size = UDim2.new(1, -10, 0, 26)
+    row.BackgroundColor3 = Color3.fromRGB(20,20,32)
+    row.BorderSizePixel = 0
+    row.Parent = playersList
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Size = UDim2.new(0.6, -10, 1, 0)
+    nameLabel.Position = UDim2.new(0, 8, 0, 0)
+    nameLabel.Font = Enum.Font.Gotham
+    nameLabel.TextSize = 14
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.TextColor3 = Color3.fromRGB(230,230,255)
+    nameLabel.Text = plr.Name
+    nameLabel.Parent = row
+
+    local deviceLabel = Instance.new("TextLabel")
+    deviceLabel.BackgroundTransparency = 1
+    deviceLabel.Size = UDim2.new(0.4, -8, 1, 0)
+    deviceLabel.Position = UDim2.new(0.6, 0, 0, 0)
+    deviceLabel.Font = Enum.Font.Gotham
+    deviceLabel.TextSize = 14
+    deviceLabel.TextXAlignment = Enum.TextXAlignment.Right
+    deviceLabel.TextColor3 = Color3.fromRGB(200,200,255)
+    deviceLabel.Text = GetDeviceForPlayer(plr)
+    deviceLabel.Parent = row
+end
+
+local function ClearPlayerRows()
+    for _,child in ipairs(playersList:GetChildren()) do
+        if child:IsA("Frame") then
+            child:Destroy()
+        end
+    end
+end
+
+local function RefreshPlayerList()
+    ClearPlayerRows()
+    for _,plr in ipairs(Players:GetPlayers()) do
+        CreatePlayerRow(plr)
+    end
+end
+
+-- Botón manual de refresco
+refreshBtn.MouseButton1Click:Connect(function()
+    RefreshPlayerList()
+end)
+
+-- Actualización automática al entrar / salir players
+Players.PlayerAdded:Connect(function(plr)
+    CreatePlayerRow(plr)
+end)
+
+Players.PlayerRemoving:Connect(function(plr)
+    local row = playersList:FindFirstChild(plr.Name)
+    if row then
+        row:Destroy()
+    end
+end)
 
 --------------------------------------------------
 -- PAGE 3: Sección 3
@@ -226,7 +366,10 @@ local function showPage(which)
 end
 
 t1.MouseButton1Click:Connect(function() showPage(1) end)
-t2.MouseButton1Click:Connect(function() showPage(2) end)
+t2.MouseButton1Click:Connect(function() 
+    showPage(2)
+    RefreshPlayerList()
+end)
 t3.MouseButton1Click:Connect(function() showPage(3) end)
 
 -- Por defecto: MYSELF
