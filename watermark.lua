@@ -202,12 +202,20 @@ local function createToggleRow(text)
     return toggle
 end
 
--- Estados
+--------------------------------------------------
+-- LÓGICA REAL: NOMBRES + MARCAR EN ROJO
+--------------------------------------------------
+
+-- Estados de las opciones
 local option1Enabled = false -- ver nombre de users
 local option2Enabled = false -- marcar a jugadores en rojo
-local allEnabled = false     -- activar todo/apagar
+local allEnabled     = false -- activar todo/apagar
 
--- Función para actualizar visualmente un toggle
+-- Tablas para guardar instancias
+local nameTags = {}       -- [player] = BillboardGui
+local redHighlights = {}  -- [player] = Highlight
+
+-- Actualizar visual del botón
 local function setToggleVisual(btn, state)
     if state then
         btn.Text = "ON"
@@ -218,36 +226,146 @@ local function setToggleVisual(btn, state)
     end
 end
 
--- Crear filas
-local toggle1 = createToggleRow("1) Ver nombre de users")
-local toggle2 = createToggleRow("2) Marcar a jugadores en rojo")
-local toggleAll = createToggleRow("3) Activar todo / Apagar")
+-- Crear / borrar nombre encima de la cabeza
+local function RemoveNameTag(plr)
+    local gui = nameTags[plr]
+    if gui then
+        gui:Destroy()
+        nameTags[plr] = nil
+    end
+end
 
--- LÓGICA QUE LUEGO PUEDES EDITAR PARA HACER COSAS REALES
+local function ApplyNameTag(plr)
+    local char = plr.Character
+    if not char then return end
+    local head = char:FindFirstChild("Head")
+    if not head then return end
+
+    -- Si ya existe, solo re-adornear
+    local gui = nameTags[plr]
+    if gui and gui.Parent then
+        gui.Adornee = head
+        gui.Parent = head
+        return
+    end
+
+    gui = Instance.new("BillboardGui")
+    gui.Name = "NameESP"
+    gui.Size = UDim2.new(0, 200, 0, 50)
+    gui.StudsOffset = Vector3.new(0, 3, 0)
+    gui.AlwaysOnTop = true
+    gui.Adornee = head
+    gui.Parent = head
+
+    local textLabel = Instance.new("TextLabel")
+    textLabel.BackgroundTransparency = 1
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.Font = Enum.Font.GothamBold
+    textLabel.TextSize = 16
+    textLabel.TextStrokeTransparency = 0.3
+    textLabel.TextColor3 = Color3.fromRGB(255,255,255)
+    textLabel.TextStrokeColor3 = Color3.fromRGB(0,0,0)
+    textLabel.Text = plr.Name
+    textLabel.Parent = gui
+
+    nameTags[plr] = gui
+end
+
+-- Crear / borrar highlight rojo en el player
+local function RemoveRedHighlight(plr)
+    local h = redHighlights[plr]
+    if h then
+        h:Destroy()
+        redHighlights[plr] = nil
+    end
+end
+
+local function ApplyRedHighlight(plr)
+    local char = plr.Character
+    if not char then return end
+
+    local h = redHighlights[plr]
+    if not h or not h.Parent then
+        h = Instance.new("Highlight")
+        redHighlights[plr] = h
+    end
+
+    h.FillColor = Color3.fromRGB(255,0,0)
+    h.FillTransparency = 0.5
+    h.OutlineColor = Color3.fromRGB(255,255,255)
+    h.OutlineTransparency = 0
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    h.Adornee = char
+    h.Parent = char
+end
+
+-- Al respawnear un player, reaplicar cosas si están ON
+local function SetupESPForPlayer(plr)
+    plr.CharacterAdded:Connect(function()
+        if option1Enabled then
+            ApplyNameTag(plr)
+        end
+        if option2Enabled then
+            ApplyRedHighlight(plr)
+        end
+    end)
+
+    if plr.Character then
+        if option1Enabled then
+            ApplyNameTag(plr)
+        end
+        if option2Enabled then
+            ApplyRedHighlight(plr)
+        end
+    end
+end
+
+-- Callbacks de cambio de opción
 local function OnOption1Changed(state)
     option1Enabled = state
     print("Opción 1 (Ver nombre de users) =", state)
-    -- Aquí puedes activar ESP de nombres, por ejemplo
+
+    -- Aplicar o quitar a todos
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if state then
+            ApplyNameTag(plr)
+        else
+            RemoveNameTag(plr)
+        end
+    end
 end
 
 local function OnOption2Changed(state)
     option2Enabled = state
     print("Opción 2 (Marcar a jugadores en rojo) =", state)
-    -- Aquí puedes marcar jugadores en rojo, highlight, etc.
+
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if state then
+            ApplyRedHighlight(plr)
+        else
+            RemoveRedHighlight(plr)
+        end
+    end
 end
 
 local function OnAllChanged(state)
     allEnabled = state
     print("Opción 3 (Activar todo/Apagar) =", state)
-    -- Sincroniza con las otras 2 opciones
+
     option1Enabled = state
     option2Enabled = state
+
     setToggleVisual(toggle1, state)
     setToggleVisual(toggle2, state)
 
     OnOption1Changed(state)
     OnOption2Changed(state)
 end
+
+-- Crear filas de toggles
+local toggle1 = createToggleRow("1) Ver nombre de users")
+local toggle2 = createToggleRow("2) Marcar a jugadores en rojo")
+local toggleAll = createToggleRow("3) Activar todo / Apagar")
 
 -- Conexiones de los botones
 toggle1.MouseButton1Click:Connect(function()
@@ -393,8 +511,15 @@ refreshBtn.MouseButton1Click:Connect(function()
     RefreshPlayerList()
 end)
 
+-- Inicializar lista + ESP para los players actuales
+for _,plr in ipairs(Players:GetPlayers()) do
+    CreatePlayerRow(plr)
+    SetupESPForPlayer(plr)
+end
+
 Players.PlayerAdded:Connect(function(plr)
     CreatePlayerRow(plr)
+    SetupESPForPlayer(plr)
 end)
 
 Players.PlayerRemoving:Connect(function(plr)
@@ -402,6 +527,8 @@ Players.PlayerRemoving:Connect(function(plr)
     if row then
         row:Destroy()
     end
+    RemoveNameTag(plr)
+    RemoveRedHighlight(plr)
 end)
 
 --------------------------------------------------
