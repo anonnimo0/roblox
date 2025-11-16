@@ -1,117 +1,141 @@
 --=====================================================
--- ADMIN PANEL SCRIPT - By pedri.exe
+-- ADMIN PANEL v2 - Actualizado
 --=====================================================
 
--- Crear GUI
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+
 local User = Players.LocalPlayer
 
-local ScreenGui = Instance.new("ScreenGui", User:WaitForChild("PlayerGui"))
+local ScreenGui = Instance.new("ScreenGui", User.PlayerGui)
 ScreenGui.Name = "AdminPanelGUI"
 ScreenGui.ResetOnSpawn = false
 
--- Panel Principal
+--=====================================================
+-- PANEL SUPERIOR (FPS + USER)
+--=====================================================
+
+local TopPanel = Instance.new("Frame", ScreenGui)
+TopPanel.Size = UDim2.new(0, 380, 0, 40)
+TopPanel.Position = UDim2.new(0.5, -190, 0, 10)
+TopPanel.BackgroundColor3 = Color3.fromRGB(0,170,255)
+TopPanel.BorderSizePixel = 0
+Instance.new("UICorner", TopPanel).CornerRadius = UDim.new(0, 10)
+
+local TopText = Instance.new("TextLabel", TopPanel)
+TopText.Size = UDim2.new(1,0,1,0)
+TopText.BackgroundTransparency = 1
+TopText.TextColor3 = Color3.new(1,1,1)
+TopText.Font = Enum.Font.GothamBold
+TopText.TextSize = 16
+TopText.Text = "ADMIN PANEL ACTIVADO | FPS: 0 | User: "..User.Name
+
+
+--=====================================================
+-- PANEL PRINCIPAL
+--=====================================================
+
 local Panel = Instance.new("Frame", ScreenGui)
 Panel.Name = "Panel"
-Panel.Size = UDim2.new(0, 420, 0, 300)
-Panel.Position = UDim2.new(0.5, -210, 1, 300)
-Panel.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Panel.Size = UDim2.new(0, 420, 0, 320)
+Panel.Position = UDim2.new(0.5,-210,1,300)
+Panel.BackgroundColor3 = Color3.fromRGB(0,130,200)
 Panel.BorderSizePixel = 0
+Panel.Visible = false
 Panel.Active = true
 Panel.Draggable = true
 
-local Corner = Instance.new("UICorner", Panel)
-Corner.CornerRadius = UDim.new(0, 12)
+Instance.new("UICorner", Panel).CornerRadius = UDim.new(0, 12)
 
--- Barra superior
-local Topbar = Instance.new("Frame", Panel)
-Topbar.Size = UDim2.new(1, 0, 0, 40)
-Topbar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-Instance.new("UICorner", Topbar).CornerRadius = UDim.new(0, 12)
+-- Título
+local Title = Instance.new("TextLabel", Panel)
+Title.Size = UDim2.new(1,0,0,40)
+Title.Position = UDim2.new(0,0,0,10)
+Title.BackgroundTransparency = 1
+Title.Text = "ADMIN PANEL"
+Title.TextColor3 = Color3.new(1,1,1)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 28
 
-local TopLabel = Instance.new("TextLabel", Topbar)
-TopLabel.Size = UDim2.new(1, 0, 1, 0)
-TopLabel.BackgroundTransparency = 1
-TopLabel.Text = "ADMIN PANEL ACTIVADO | FPS: 0 | User: "..User.Name
-TopLabel.TextColor3 = Color3.fromRGB(255,255,255)
-TopLabel.Font = Enum.Font.GothamBold
-TopLabel.TextSize = 16
-
--- USER INPUT
+--=====================================================
+-- INPUT USUARIO
+--=====================================================
 local UserBox = Instance.new("TextBox", Panel)
 UserBox.PlaceholderText = "Pon tu usuario aquí"
 UserBox.Text = ""
-UserBox.Size = UDim2.new(0.8, 0, 0, 40)
-UserBox.Position = UDim2.new(0.1, 0, 0.25, 0)
-UserBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-UserBox.TextColor3 = Color3.fromRGB(255,255,255)
-Instance.new("UICorner", UserBox).CornerRadius = UDim.new(0, 10)
+UserBox.Size = UDim2.new(0.8,0,0,40)
+UserBox.Position = UDim2.new(0.1,0,0.28,0)
+UserBox.BackgroundColor3 = Color3.fromRGB(0,160,240)
+UserBox.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", UserBox).CornerRadius = UDim.new(0,10)
 
+--=====================================================
+-- INPUT CONTRASEÑA
+--=====================================================
 local PassBox = Instance.new("TextBox", Panel)
 PassBox.PlaceholderText = "Pon tu contraseña aquí"
 PassBox.Text = ""
-PassBox.Size = UDim2.new(0.8, 0, 0, 40)
-PassBox.Position = UDim2.new(0.1, 0, 0.45, 0)
-PassBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-PassBox.TextColor3 = Color3.fromRGB(255,255,255)
-Instance.new("UICorner", PassBox).CornerRadius = UDim.new(0, 10)
+PassBox.Size = UDim2.new(0.8,0,0,40)
+PassBox.Position = UDim2.new(0.1,0,0.45,0)
+PassBox.BackgroundColor3 = Color3.fromRGB(0,160,240)
+PassBox.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", PassBox).CornerRadius = UDim.new(0,10)
 
+--=====================================================
+-- BOTÓN ENTRAR
+--=====================================================
+local EnterButton = Instance.new("TextButton", Panel)
+EnterButton.Size = UDim2.new(0.6,0,0,40)
+EnterButton.Position = UDim2.new(0.2,0,0.65,0)
+EnterButton.BackgroundColor3 = Color3.fromRGB(0,190,255)
+EnterButton.Text = "ENTRAR"
+EnterButton.TextColor3 = Color3.new(1,1,1)
+EnterButton.Font = Enum.Font.GothamBold
+EnterButton.TextSize = 20
+Instance.new("UICorner", EnterButton).CornerRadius = UDim.new(0,10)
+
+-- Status
 local Status = Instance.new("TextLabel", Panel)
 Status.Size = UDim2.new(1,0,0,40)
-Status.Position = UDim2.new(0,0,0.65,0)
+Status.Position = UDim2.new(0,0,0.8,0)
 Status.BackgroundTransparency = 1
 Status.TextColor3 = Color3.new(1,1,1)
 Status.Font = Enum.Font.GothamBold
 Status.TextSize = 18
 Status.Text = ""
 
--- Animación de bolas cayendo
-local BallsFolder = Instance.new("Folder", ScreenGui)
-
-local function SpawnBall()
-    local ball = Instance.new("Frame", BallsFolder)
-    ball.Size = UDim2.new(0, math.random(20,50), 0, math.random(20,50))
-    ball.Position = UDim2.new(math.random(), 0, -0.1, 0)
-    ball.BackgroundColor3 = Color3.fromRGB(255, math.random(50,255), math.random(50,255))
-    Instance.new("UICorner", ball).CornerRadius = UDim.new(1,0)
-
-    task.spawn(function()
-        for i = -0.1, 1.1, 0.01 do
-            if Panel.Visible == false then 
-                ball:Destroy()
-                return
-            end
-            ball.Position = UDim2.new(ball.Position.X.Scale,0, i, 0)
-            task.wait(0.01)
-        end
-        ball:Destroy()
-    end)
+--=====================================================
+-- FUNCIÓN LOGIN
+--=====================================================
+local function CheckLogin()
+    if UserBox.Text == "ASTRA" and PassBox.Text == "FREE" then
+        Status.Text = "✔ Acceso Correcto"
+        Status.TextColor3 = Color3.fromRGB(0,255,0)
+    else
+        Status.Text = "❌ Usuario o Contraseña Incorrectos"
+        Status.TextColor3 = Color3.fromRGB(255,0,0)
+    end
 end
 
--- Mostrar/Ocultar con L
+EnterButton.MouseButton1Click:Connect(CheckLogin)
+
+--=====================================================
+-- ANIMACIÓN ABRIR / CERRAR con L
+--=====================================================
+
 local open = false
-local UIS = game:GetService("UserInputService")
 
 local function TogglePanel()
     open = not open
 
     if open then
         Panel.Visible = true
-        for i = 1,30 do
-            SpawnBall()
-            task.wait(0.05)
-        end
-
-        -- Animación de subir
         Panel:TweenPosition(UDim2.new(0.5,-210,0.3,0), "Out", "Quad", 0.5, true)
-
     else
-        -- Animación de bajar
         Panel:TweenPosition(UDim2.new(0.5,-210,1,300), "Out", "Quad", 0.5, true)
         task.wait(0.5)
         Panel.Visible = false
-        BallsFolder:ClearAllChildren()
     end
 end
 
@@ -121,22 +145,11 @@ UIS.InputBegan:Connect(function(key)
     end
 end)
 
--- Login
-local function CheckLogin()
-    if UserBox.Text == "ASTRA" and PassBox.Text == "FREE" then
-        Status.Text = "✔ Acceso concedido"
-        Status.TextColor3 = Color3.fromRGB(0,255,0)
-    else
-        Status.Text = "❌ Usuario o contraseña incorrectos"
-        Status.TextColor3 = Color3.fromRGB(255,0,0)
-    end
-end
+--=====================================================
+-- FPS EN VIVO
+--=====================================================
 
-UserBox.FocusLost:Connect(CheckLogin)
-PassBox.FocusLost:Connect(CheckLogin)
-
--- FPS LIVE
-RunService.RenderStepped:Connect(function()
-    local fps = math.floor(1 / RunService.RenderStepped:Wait())
-    TopLabel.Text = "ADMIN PANEL ACTIVADO | FPS: "..fps.." | User: "..User.Name
+RunService.RenderStepped:Connect(function(dt)
+    local fps = math.floor(1/dt)
+    TopText.Text = "ADMIN PANEL ACTIVADO | FPS: "..fps.." | User: "..User.Name
 end)
