@@ -108,6 +108,53 @@ screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 -- Main frame (neon square)
+-- LOGIN WINDOW
+local loginFrame = Instance.new("Frame")
+loginFrame.Size = UDim2.new(0, 320, 0, 180)
+loginFrame.Position = UDim2.new(0.5, -160, 0.5, -90)
+loginFrame.AnchorPoint = Vector2.new(0.5,0.5)
+loginFrame.BackgroundColor3 = Color3.fromRGB(20,20,30)
+loginFrame.BorderSizePixel = 0
+loginFrame.Parent = screenGui
+
+local loginTitle = Instance.new("TextLabel")
+loginTitle.Size = UDim2.new(1,0,0,40)
+loginTitle.Position = UDim2.new(0,0,0,6)
+loginTitle.BackgroundTransparency = 1
+loginTitle.Text = "ASTRA.GG LOGIN"
+loginTitle.TextScaled = true
+loginTitle.Font = Enum.Font.GothamBold
+loginTitle.TextColor3 = Color3.fromRGB(230,230,255)
+loginTitle.Parent = loginFrame
+
+local keyBox = Instance.new("TextBox")
+keyBox.Size = UDim2.new(1,-40,0,36)
+keyBox.Position = UDim2.new(0,20,0,70)
+keyBox.PlaceholderText = "Ingresa Key"
+keyBox.Text = ""
+keyBox.Font = Enum.Font.Gotham
+keyBox.TextSize = 18
+keyBox.BackgroundTransparency = 0.2
+keyBox.Parent = loginFrame
+
+local loginBtn = Instance.new("TextButton")
+loginBtn.Size = UDim2.new(0,120,0,34)
+loginBtn.Position = UDim2.new(0.5,-60,0,120)
+loginBtn.Text = "ENTRAR"
+loginBtn.Font = Enum.Font.GothamBold
+loginBtn.TextSize = 18
+loginBtn.Parent = loginFrame
+
+loginBtn.MouseButton1Click:Connect(function()
+    if keyBox.Text == "bypedri.exe" then
+        loginFrame.Visible = false
+        frame.Visible = true
+    else
+        keyBox.Text = ""
+        keyBox.PlaceholderText = "KEY INCORRECTA"
+    end
+end)
+
 local frame = Instance.new("Frame")
 frame.Size = UDim2.new(0, 420, 0, 300)
 frame.Position = UDim2.new(0.5, -210, 0.5, -150)
