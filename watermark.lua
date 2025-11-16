@@ -1,177 +1,138 @@
----------------------------------------------------------
--- FUNCIONES LEGÍTÍMAS DE ADMIN
----------------------------------------------------------
+-- LocalScript (StarterGui)
 
-local character = User.Character or User.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
+local UIS = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Player = game.Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
 
----------------------------------------------------------
--- NAME (TEXTO ARRIBA DEL JUGADOR)
----------------------------------------------------------
+-------------------------------------------------
+-- CREAR GUI SI NO EXISTE
+-------------------------------------------------
 
-local NameTagEnabled = false
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AdminPanelGUI"
+ScreenGui.Parent = PlayerGui
+ScreenGui.ResetOnSpawn = false
 
-local function ToggleName()
-    NameTagEnabled = not NameTagEnabled
+-------------------------------------------------
+-- PANEL PRINCIPAL (LOGIN)
+-------------------------------------------------
 
-    if NameTagEnabled then
-        -- Crear BillboardGui
-        local bill = Instance.new("BillboardGui")
-        bill.Name = "AdminNameTag"
-        bill.Size = UDim2.new(5,0,1,0)
-        bill.StudsOffset = Vector3.new(0,2,0)
-        bill.AlwaysOnTop = true
-        bill.Parent = character:WaitForChild("Head")
+local Panel = Instance.new("Frame")
+Panel.Name = "LoginPanel"
+Panel.Size = UDim2.new(0, 400, 0, 320)
+Panel.Position = UDim2.new(0.5, -200, 0.5, -160)
+Panel.BackgroundColor3 = Color3.fromRGB(70, 160, 255)
+Panel.Visible = false
+Panel.Parent = ScreenGui
+Panel.BorderSizePixel = 0
+Panel.BackgroundTransparency = 0.1
+Panel.ClipsDescendants = true
+Panel.ZIndex = 3
 
-        local text = Instance.new("TextLabel", bill)
-        text.Size = UDim2.new(1,0,1,0)
-        text.BackgroundTransparency = 1
-        text.TextColor3 = Color3.fromRGB(0,200,255)
-        text.Font = Enum.Font.GothamBold
-        text.TextScaled = true
-        text.Text = "ADMIN"
+local UICorner = Instance.new("UICorner", Panel)
+UICorner.CornerRadius = UDim.new(0, 20)
+
+-------------------------------------------------
+-- TÍTULO
+-------------------------------------------------
+
+local Title = Instance.new("TextLabel", Panel)
+Title.Size = UDim2.new(1, 0, 0, 50)
+Title.BackgroundTransparency = 1
+Title.Text = "ADMIN PANEL"
+Title.Font = Enum.Font.GothamBold
+Title.TextScaled = true
+Title.TextColor3 = Color3.fromRGB(255,255,255)
+
+-------------------------------------------------
+-- USER BOX
+-------------------------------------------------
+
+local UserBox = Instance.new("TextBox", Panel)
+UserBox.Size = UDim2.new(0.8, 0, 0, 45)
+UserBox.Position = UDim2.new(0.1, 0, 0.3, 0)
+UserBox.PlaceholderText = "Pon tu usuario"
+UserBox.Font = Enum.Font.Gotham
+UserBox.TextScaled = true
+UserBox.BackgroundColor3 = Color3.fromRGB(35, 130, 255)
+UserBox.TextColor3 = Color3.fromRGB(255,255,255)
+Instance.new("UICorner", UserBox).CornerRadius = UDim.new(0, 12)
+
+local PassBox = Instance.new("TextBox", Panel)
+PassBox.Size = UDim2.new(0.8, 0, 0, 45)
+PassBox.Position = UDim2.new(0.1, 0, 0.47, 0)
+PassBox.PlaceholderText = "Pon tu contraseña"
+PassBox.Font = Enum.Font.Gotham
+PassBox.TextScaled = true
+PassBox.BackgroundColor3 = Color3.fromRGB(35, 130, 255)
+PassBox.TextColor3 = Color3.fromRGB(255,255,255)
+Instance.new("UICorner", PassBox).CornerRadius = UDim.new(0, 12)
+
+-------------------------------------------------
+-- BOTÓN ENTRAR
+-------------------------------------------------
+
+local Enter = Instance.new("TextButton", Panel)
+Enter.Size = UDim2.new(0.5, 0, 0, 45)
+Enter.Position = UDim2.new(0.25, 0, 0.67, 0)
+Enter.Text = "ENTRAR"
+Enter.BackgroundColor3 = Color3.fromRGB(0, 90, 255)
+Enter.TextColor3 = Color3.fromRGB(255,255,255)
+Enter.Font = Enum.Font.GothamBold
+Enter.TextScaled = true
+Instance.new("UICorner", Enter).CornerRadius = UDim.new(0, 12)
+
+-------------------------------------------------
+-- ANIMACIÓN DE APERTURA
+-------------------------------------------------
+
+local openTween = TweenService:Create(Panel, TweenInfo.new(0.5, Enum.EasingStyle.Back), {
+    Size = UDim2.new(0, 400, 0, 320)
+})
+
+local closeTween = TweenService:Create(Panel, TweenInfo.new(0.4, Enum.EasingStyle.Quad), {
+    Size = UDim2.new(0, 0, 0, 0)
+})
+
+local panelOpen = false
+
+local function TogglePanel()
+    if not panelOpen then
+        Panel.Visible = true
+        openTween:Play()
+        panelOpen = true
     else
-        if character:FindFirstChild("Head"):FindFirstChild("AdminNameTag") then
-            character.Head.AdminNameTag:Destroy()
-        end
+        closeTween:Play()
+        task.wait(0.35)
+        Panel.Visible = false
+        panelOpen = false
     end
 end
 
-BtnName.MouseButton1Click:Connect(ToggleName)
+-------------------------------------------------
+-- TECLA L PARA ABRIR / CERRAR
+-------------------------------------------------
 
-
----------------------------------------------------------
--- BOX / HIGHLIGHT (ILUMINACIÓN)
----------------------------------------------------------
-
-local BoxEnabled = false
-local highlights = {}
-
-local function ToggleBox()
-    BoxEnabled = not BoxEnabled
-
-    if BoxEnabled then
-        -- Crear highlight para cada jugador
-        for _,plr in pairs(Players:GetPlayers()) do
-            if plr.Character then
-                local h = Instance.new("Highlight")
-                h.FillTransparency = 1
-                h.OutlineColor = Color3.fromRGB(0,200,255)
-                h.Parent = plr.Character
-                highlights[plr.Name] = h
-            end
-        end
-    else
-        -- Borrar todos
-        for _,h in pairs(highlights) do
-            if h then h:Destroy() end
-        end
-        highlights = {}
-    end
-end
-
--- Auto actualizar si entran jugadores
-Players.PlayerAdded:Connect(function(plr)
-    if BoxEnabled then
-        plr.CharacterAdded:Connect(function(char)
-            local h = Instance.new("Highlight")
-            h.FillTransparency = 1
-            h.OutlineColor = Color3.fromRGB(0,200,255)
-            h.Parent = char
-            highlights[plr.Name] = h
-        end)
+UIS.InputBegan:Connect(function(key, typing)
+    if typing then return end
+    if key.KeyCode == Enum.KeyCode.L then
+        TogglePanel()
     end
 end)
 
-BtnBox.MouseButton1Click:Connect(ToggleBox)
+-------------------------------------------------
+-- VALIDADOR LOGIN
+-------------------------------------------------
 
-
----------------------------------------------------------
--- NOCLIP LEGAL (ATRAVESAR PAREDES)
----------------------------------------------------------
-
-local Noclip = false
-
-local function ToggleNoclip()
-    Noclip = not Noclip
-
-    if Noclip then
-        humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+Enter.MouseButton1Click:Connect(function()
+    if UserBox.Text == "ASTRA" and PassBox.Text == "FREE" then
+        warn("LOGIN CORRECTO")
+        -- AQUÍ CARGAREMOS EL PANEL GRANDE LUEGO
     else
-        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-    end
-end
-
-RunService.Stepped:Connect(function()
-    if Noclip and character then
-        for _, part in pairs(character:GetChildren()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
+        UserBox.Text = ""
+        PassBox.Text = ""
+        UserBox.PlaceholderText = "Incorrecto!"
+        PassBox.PlaceholderText = "Incorrecto!"
     end
 end)
-
-BtnWall.MouseButton1Click:Connect(ToggleNoclip)
-
-
----------------------------------------------------------
--- FLY LEGAL ADMIN
----------------------------------------------------------
-
-local Flying = false
-local speed = 60
-
-local bodyGyro
-local bodyVel
-
-local function ToggleFly()
-    Flying = not Flying
-
-    if Flying then
-        local root = character:WaitForChild("HumanoidRootPart")
-
-        bodyGyro = Instance.new("BodyGyro")
-        bodyGyro.MaxTorque = Vector3.new(9e9,9e9,9e9)
-        bodyGyro.P = 10000
-        bodyGyro.Parent = root
-
-        bodyVel = Instance.new("BodyVelocity")
-        bodyVel.Velocity = Vector3.new(0,0,0)
-        bodyVel.MaxForce = Vector3.new(9e9,9e9,9e9)
-        bodyVel.Parent = root
-
-        humanoid.PlatformStand = true
-
-        -- Control de vuelo
-        RunService.RenderStepped:Connect(function()
-            if Flying then
-                local cam = workspace.CurrentCamera
-                bodyGyro.CFrame = cam.CFrame
-
-                local move = Vector3.new(0,0,0)
-
-                if UIS:IsKeyDown(Enum.KeyCode.W) then
-                    move = move + cam.CFrame.LookVector
-                end
-                if UIS:IsKeyDown(Enum.KeyCode.S) then
-                    move = move - cam.CFrame.LookVector
-                end
-                if UIS:IsKeyDown(Enum.KeyCode.A) then
-                    move = move - cam.CFrame.RightVector
-                end
-                if UIS:IsKeyDown(Enum.KeyCode.D) then
-                    move = move + cam.CFrame.RightVector
-                end
-
-                bodyVel.Velocity = move * speed
-            end
-        end)
-    else
-        humanoid.PlatformStand = false
-        if bodyGyro then bodyGyro:Destroy() end
-        if bodyVel then bodyVel:Destroy() end
-    end
-end
-
-BtnFly.MouseButton1Click:Connect(ToggleFly)
