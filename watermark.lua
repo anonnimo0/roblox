@@ -1,79 +1,55 @@
-getgenv().boolEsp = true
-kVars = {}
-kVars.lp = game.Players.LocalPlayer
-kVars.Esp = {}
-kVars.ConnectPlayerRemoving = game.Players.PlayerRemoving:Connect(function(player)
-    if kVars.Esp[player.Name] then
-        kVars.Esp[player.Name].sq:Remove()
-        kVars.Esp[player.Name].txt:Remove()
-    end
 
-end)
+local sides = {Enum.NormalId.Top, Enum.NormalId.Bottom, Enum.NormalId.Left, Enum.NormalId.Right, Enum.NormalId.Front, Enum.NormalId.Back}
 
-function mean(t)
-    local add = 0
-    for i,v in pairs(t) do
-        add = add + v
-    end
-    return add / #t
-end
-while boolEsp do
-    task.wait()
-    for i,v in pairs(game.Players:GetChildren()) do
-        if v.Character and v.Character:FindFirstChild("Head") then
-            if v.Name ~= kVars.lp.Name then
-                if not kVars.Esp[v.Name] then
-                    kVars.Esp[v.Name] = {}
-                    local pHead = v.Character.Head
-                    local pHrp = v.Character.HumanoidRootPart 
-                    -- esp square
-                    kVars.Esp[v.Name].sq = Drawing.new("Square")
-                    kVars.Esp[v.Name].sq.Visible = false
-                    kVars.Esp[v.Name].sq.Thickness = 1
-                    kVars.Esp[v.Name].sq.Size = Vector2.new(10,10)
-                    kVars.Esp[v.Name].sq.Filled = false
-                    local vector, onScreen = game.Workspace.CurrentCamera:WorldToViewportPoint(pHead.Position)
-                    kVars.Esp[v.Name].sq.Position = Vector2.new(vector.x, vector.y)
-                    -- esp text
-                    kVars.Esp[v.Name].txt = Drawing.new("Text")
-                    kVars.Esp[v.Name].txt.Visible = false
-                    kVars.Esp[v.Name].txt.Size = 16
-                    kVars.Esp[v.Name].txt.Color = Color3.fromRGB(0, 255, 60)
-                    kVars.Esp[v.Name].txt.Transparency = 1
-                    kVars.Esp[v.Name].txt.ZIndex = 1
-                    kVars.Esp[v.Name].txt.Center = true
-                    kVars.Esp[v.Name].txt.Font = 3
-                    kVars.Esp[v.Name].txt.Outline = true
-                    kVars.Esp[v.Name].txt.OutlineColor = Color3.fromRGB(0, 0, 0)
-                    kVars.Esp[v.Name].txt.Text = v.Name
-                end
-                local vector, onScreen = game.Workspace.CurrentCamera:WorldToViewportPoint(v.Character.Head.Position)                
-                if onScreen then
-                    local tHead = v.Character.Head
-                    local tHrp = v.Character.HumanoidRootPart
-                    local distBetHeadHrp = Vector3.new(mean({tHead.Position.x, tHrp.Position.x}),mean({tHead.Position.y, tHrp.Position.y}),mean({tHead.Position.z, tHrp.Position.z}))
-                    local screenDistBetHeadHrp, onscreenDistBetHeadHrp = game.Workspace.CurrentCamera:WorldToViewportPoint(distBetHeadHrp)
-                    local screenPosHead, onscreenPosHead = game.Workspace.CurrentCamera:WorldToViewportPoint(tHead.Position)
-                    local screenPosHrp, onscreenPosHrp = game.Workspace.CurrentCamera:WorldToViewportPoint(tHrp.Position)
-                    local diffScreen = (screenPosHead - screenPosHrp).Magnitude
-                    kVars.Esp[v.Name].sq.Visible = true
-                    kVars.Esp[v.Name].sq.Position = Vector2.new((screenDistBetHeadHrp.x - diffScreen), (screenDistBetHeadHrp.y - diffScreen)) 
-                    kVars.Esp[v.Name].sq.Size = Vector2.new(diffScreen * 2, diffScreen * 3)
-                    kVars.Esp[v.Name].txt.Visible = true
-                    kVars.Esp[v.Name].txt.Position = Vector2.new((screenPosHead.x), (kVars.Esp[v.Name].sq.Position.y - diffScreen))
-
-                else
-                    kVars.Esp[v.Name].sq.Visible = false
-                    kVars.Esp[v.Name].txt.Visible = false
-
+function EspChar()
+    --pcall(function()
+        local players = game:GetService("Players")
+        for i,v in pairs(players:GetChildren()) do
+            local char = v.Character or v.CharacterAdded:Wait()
+            if v.Name ~= game.Players.LocalPlayer.Name then
+                for _,a in pairs(char:GetChildren()) do
+                    if not a:FindFirstChild("ESP") then
+                        if a.ClassName == "MeshPart" or a.ClassName == "Part" then
+                            for _,y in pairs(sides) do
+                                local sg = Instance.new("SurfaceGui")
+                                sg.Name = "ESP"
+                                sg.Face = y
+                                sg.Adornee = a
+                                sg.Parent = a
+                                sg.AlwaysOnTop = true
+                                sg.MaxDistance = math.huge
+                                sg.LightInfluence = 0
+                                sg.Brightness = 1000
+                                sg.ZOffset = 1
+                                local fr = Instance.new("Frame")
+                                fr.Name = "ESP"
+                                fr.Parent = sg
+                                fr.Size = UDim2.new(1,0,1,0)
+                                fr.BackgroundColor3 = Color3.new(0, 1, 0)
+                                fr.Transparency = 0.3
+                            end
+                        end
+                    end
                 end
             end
         end
-    end
-
+    --end)
 end
 
-kVars.ConnectPlayerRemoving:Disconnect()
-script:Destroy()
-return
-        
+local connectPlayerAdded = game:GetService("Players").PlayerAdded:Connect(function(player) ---- player joins game
+    local connectCharacterAdded = player.CharacterAdded:Connect(function(char) ---- Character is added to workspace
+        if player.Name ~= game.Players.LocalPlayer.name then
+            repeat
+                task.wait(.2)
+            until player.Character and player.Character.Humanoid and player.Character.HumanoidRootPart
+            task.wait(1)
+            EspChar()
+        end
+    end)  
+end)
+
+
+EspChar()
+
+
+    
